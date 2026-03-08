@@ -10,6 +10,7 @@ USAGE_API_USER_AGENT="ClaudeDesktop/2.0.5"
 USAGE_API_VERSION="2023-06-01"
 USAGE_API_BETA="oauth-2025-04-20"
 # ────────────────────────────────────────────────────────────────
+PYTHON_CMD="$(command -v python3 || command -v python)"
 
 input=$(cat)
 cwd_real=$(echo "$input" | jq -r '.workspace.current_dir // .cwd')
@@ -77,15 +78,15 @@ else
 fi
 now=$(date +%s)
 
-# Check if cache dir is writable; skip API entirely if not
+# Check if cache dir is writable; writes are best-effort when not writable
 cache_writable=false
 if [ -w "$CACHE_DIR" ]; then
   cache_writable=true
 fi
 
 use_cache=false
-if [ "$cache_writable" = true ] && [ -f "$CACHE_FILE" ]; then
-  cache_time=$(python -c "import json; d=json.load(open('$CACHE_FILE_PY')); print(d.get('_ts', 0))" 2>/dev/null || echo 0)
+if [ -f "$CACHE_FILE" ]; then
+  cache_time=$(CACHE_FILE_PY="$CACHE_FILE_PY" "$PYTHON_CMD" -c "import json,os; d=json.load(open(os.environ['CACHE_FILE_PY'])); print(d.get('_ts', 0))" 2>/dev/null || echo 0)
   if [ $(( now - cache_time )) -lt $CACHE_TTL ]; then
     use_cache=true
   fi
@@ -98,15 +99,15 @@ seven_resets_at=""
 api_error=""
 
 if [ "$use_cache" = true ]; then
-  five_pct=$(python -c "import json; d=json.load(open('$CACHE_FILE_PY')); print(int(d.get('five_hour_pct', -1)))" 2>/dev/null)
-  seven_pct=$(python -c "import json; d=json.load(open('$CACHE_FILE_PY')); print(int(d.get('seven_day_pct', -1)))" 2>/dev/null)
-  five_resets_at=$(python -c "import json; d=json.load(open('$CACHE_FILE_PY')); print(d.get('five_resets_at', ''))" 2>/dev/null)
-  seven_resets_at=$(python -c "import json; d=json.load(open('$CACHE_FILE_PY')); print(d.get('seven_resets_at', ''))" 2>/dev/null)
-  api_error=$(python -c "import json; d=json.load(open('$CACHE_FILE_PY')); print(d.get('api_error', ''))" 2>/dev/null)
-elif [ "$cache_writable" = true ]; then
+  five_pct=$(CACHE_FILE_PY="$CACHE_FILE_PY" "$PYTHON_CMD" -c "import json,os; d=json.load(open(os.environ['CACHE_FILE_PY'])); print(int(d.get('five_hour_pct', -1)))" 2>/dev/null)
+  seven_pct=$(CACHE_FILE_PY="$CACHE_FILE_PY" "$PYTHON_CMD" -c "import json,os; d=json.load(open(os.environ['CACHE_FILE_PY'])); print(int(d.get('seven_day_pct', -1)))" 2>/dev/null)
+  five_resets_at=$(CACHE_FILE_PY="$CACHE_FILE_PY" "$PYTHON_CMD" -c "import json,os; d=json.load(open(os.environ['CACHE_FILE_PY'])); print(d.get('five_resets_at', ''))" 2>/dev/null)
+  seven_resets_at=$(CACHE_FILE_PY="$CACHE_FILE_PY" "$PYTHON_CMD" -c "import json,os; d=json.load(open(os.environ['CACHE_FILE_PY'])); print(d.get('seven_resets_at', ''))" 2>/dev/null)
+  api_error=$(CACHE_FILE_PY="$CACHE_FILE_PY" "$PYTHON_CMD" -c "import json,os; d=json.load(open(os.environ['CACHE_FILE_PY'])); print(d.get('api_error', ''))" 2>/dev/null)
+else
   # Get OAuth token: try macOS Keychain first, then credentials file (Windows/Linux)
   TOKEN=$(security find-generic-password -s "Claude Code-credentials" -w 2>/dev/null \
-    | python -c "import json,sys; d=json.load(sys.stdin); print(d['claudeAiOauth']['accessToken'])" 2>/dev/null)
+    | "$PYTHON_CMD" -c "import json,sys; d=json.load(sys.stdin); print(d['claudeAiOauth']['accessToken'])" 2>/dev/null)
   if [ -z "$TOKEN" ]; then
     TOKEN=$(jq -r '.claudeAiOauth.accessToken // empty' "${HOME}/.claude/.credentials.json" 2>/dev/null)
   fi
@@ -121,14 +122,14 @@ elif [ "$cache_writable" = true ]; then
 
     if [ $curl_exit -eq 28 ]; then
       api_error="timeout"
-      python -c "import json,time; json.dump({'_ts': int(time.time()), 'api_error': 'timeout'}, open('$CACHE_FILE_PY', 'w'))" 2>/dev/null
+      CACHE_FILE_PY="$CACHE_FILE_PY" "$PYTHON_CMD" -c "import json,time,os; json.dump({'_ts': int(time.time()), 'api_error': 'timeout'}, open(os.environ['CACHE_FILE_PY'], 'w'))" 2>/dev/null
       printf '%s [curl_exit=%d] error:timeout\n' "$(date '+%Y-%m-%d %H:%M:%S')" "$curl_exit" >> "$LOG_FILE" 2>/dev/null
     elif [ $curl_exit -ne 0 ]; then
       api_error="unknown"
-      python -c "import json,time; json.dump({'_ts': int(time.time()), 'api_error': 'unknown'}, open('$CACHE_FILE_PY', 'w'))" 2>/dev/null
+      CACHE_FILE_PY="$CACHE_FILE_PY" "$PYTHON_CMD" -c "import json,time,os; json.dump({'_ts': int(time.time()), 'api_error': 'unknown'}, open(os.environ['CACHE_FILE_PY'], 'w'))" 2>/dev/null
       printf '%s [curl_exit=%d] error:unknown\n' "$(date '+%Y-%m-%d %H:%M:%S')" "$curl_exit" >> "$LOG_FILE" 2>/dev/null
     else
-      parsed=$(API_RESP="$api_resp" python - <<'PYEOF' 2>/dev/null
+      parsed=$(API_RESP="$api_resp" "$PYTHON_CMD" - <<'PYEOF' 2>/dev/null
 import json, sys, os
 
 resp = os.environ.get('API_RESP', '')
@@ -165,25 +166,28 @@ PYEOF
 
       if [[ "$parsed" == error:* ]]; then
         api_error="${parsed#error:}"
-        python -c "import json,time; json.dump({'_ts': int(time.time()), 'api_error': '$api_error'}, open('$CACHE_FILE_PY', 'w'))" 2>/dev/null
+        API_ERROR="$api_error" CACHE_FILE_PY="$CACHE_FILE_PY" "$PYTHON_CMD" -c "import json,time,os; json.dump({'_ts': int(time.time()), 'api_error': os.environ['API_ERROR']}, open(os.environ['CACHE_FILE_PY'], 'w'))" 2>/dev/null
         printf '%s [curl_exit=%d] %s resp=%s\n' "$(date '+%Y-%m-%d %H:%M:%S')" "$curl_exit" "$parsed" "$api_resp" >> "$LOG_FILE" 2>/dev/null
       elif [ -n "$parsed" ]; then
         IFS='|' read -r five_pct seven_pct five_resets_at seven_resets_at <<< "$parsed"
         printf '%s [curl_exit=%d] ok 5h=%s%% 7d=%s%%\n' "$(date '+%Y-%m-%d %H:%M:%S')" "$curl_exit" "$five_pct" "$seven_pct" >> "$LOG_FILE" 2>/dev/null
-        python - <<PYEOF 2>/dev/null
-import json, time
+        FIVE_PCT="$five_pct" SEVEN_PCT="$seven_pct" \
+        FIVE_RESETS_AT="$five_resets_at" SEVEN_RESETS_AT="$seven_resets_at" \
+        CACHE_FILE_PY="$CACHE_FILE_PY" "$PYTHON_CMD" - <<'PYEOF' 2>/dev/null
+import json, time, os
 d = {
   '_ts': int(time.time()),
-  'five_hour_pct': $five_pct,
-  'seven_day_pct': $seven_pct,
-  'five_resets_at': '$five_resets_at',
-  'seven_resets_at': '$seven_resets_at'
+  'five_hour_pct': int(os.environ['FIVE_PCT']),
+  'seven_day_pct': int(os.environ['SEVEN_PCT']),
+  'five_resets_at': os.environ['FIVE_RESETS_AT'],
+  'seven_resets_at': os.environ['SEVEN_RESETS_AT']
 }
-json.dump(d, open('$CACHE_FILE_PY', 'w'))
+with open(os.environ['CACHE_FILE_PY'], 'w') as f:
+    json.dump(d, f)
 PYEOF
       else
         api_error="unknown"
-        python -c "import json,time; json.dump({'_ts': int(time.time()), 'api_error': 'unknown'}, open('$CACHE_FILE_PY', 'w'))" 2>/dev/null
+        CACHE_FILE_PY="$CACHE_FILE_PY" "$PYTHON_CMD" -c "import json,time,os; json.dump({'_ts': int(time.time()), 'api_error': 'unknown'}, open(os.environ['CACHE_FILE_PY'], 'w'))" 2>/dev/null
         printf '%s [curl_exit=%d] error:unknown (empty parsed) resp=%s\n' "$(date '+%Y-%m-%d %H:%M:%S')" "$curl_exit" "$api_resp" >> "$LOG_FILE" 2>/dev/null
       fi
     fi
@@ -195,11 +199,11 @@ fi
 fmt_remaining() {
   local iso_str="$1"
   [ -z "$iso_str" ] && return
-  python - <<PYEOF 2>/dev/null
-import sys
+  ISO_STR="$iso_str" "$PYTHON_CMD" - <<'PYEOF' 2>/dev/null
+import sys, os
 from datetime import datetime, timezone, timedelta
 
-iso = '$iso_str'
+iso = os.environ.get('ISO_STR', '')
 try:
     dt = datetime.fromisoformat(iso.replace('Z', '+00:00'))
     now = datetime.now(timezone.utc)
