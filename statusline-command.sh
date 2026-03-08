@@ -11,6 +11,10 @@ USAGE_API_VERSION="2023-06-01"
 USAGE_API_BETA="oauth-2025-04-20"
 # ────────────────────────────────────────────────────────────────
 PYTHON_CMD="$(command -v python3 || command -v python)"
+if [ -z "$PYTHON_CMD" ]; then
+  printf 'statusline-command.sh: python3 or python not found\n' >&2
+  exit 1
+fi
 
 input=$(cat)
 cwd_real=$(echo "$input" | jq -r '.workspace.current_dir // .cwd')
@@ -41,7 +45,8 @@ RESET=$'\033[0m'
 
 # Color based on model name
 model_color() {
-  local model_lower=$(echo "$1" | tr '[:upper:]' '[:lower:]')
+  local model_lower
+  model_lower=$(echo "$1" | tr '[:upper:]' '[:lower:]')
   case "$model_lower" in
     *haiku*) printf '%s' "$AMBER" ;;
     *sonnet*) printf '%s' "$SKY_BLUE" ;;
@@ -71,18 +76,10 @@ LOG_FILE="${CACHE_DIR}/claude-usage-api.log"
 # Convert to Windows-native paths for use inside Python scripts.
 if command -v cygpath >/dev/null 2>&1; then
   CACHE_FILE_PY=$(cygpath -m "$CACHE_FILE")
-  LOG_FILE_PY=$(cygpath -m "$LOG_FILE")
 else
   CACHE_FILE_PY="$CACHE_FILE"
-  LOG_FILE_PY="$LOG_FILE"
 fi
 now=$(date +%s)
-
-# Check if cache dir is writable; writes are best-effort when not writable
-cache_writable=false
-if [ -w "$CACHE_DIR" ]; then
-  cache_writable=true
-fi
 
 use_cache=false
 if [ -f "$CACHE_FILE" ]; then
@@ -99,11 +96,8 @@ seven_resets_at=""
 api_error=""
 
 if [ "$use_cache" = true ]; then
-  five_pct=$(CACHE_FILE_PY="$CACHE_FILE_PY" "$PYTHON_CMD" -c "import json,os; d=json.load(open(os.environ['CACHE_FILE_PY'])); print(int(d.get('five_hour_pct', -1)))" 2>/dev/null)
-  seven_pct=$(CACHE_FILE_PY="$CACHE_FILE_PY" "$PYTHON_CMD" -c "import json,os; d=json.load(open(os.environ['CACHE_FILE_PY'])); print(int(d.get('seven_day_pct', -1)))" 2>/dev/null)
-  five_resets_at=$(CACHE_FILE_PY="$CACHE_FILE_PY" "$PYTHON_CMD" -c "import json,os; d=json.load(open(os.environ['CACHE_FILE_PY'])); print(d.get('five_resets_at', ''))" 2>/dev/null)
-  seven_resets_at=$(CACHE_FILE_PY="$CACHE_FILE_PY" "$PYTHON_CMD" -c "import json,os; d=json.load(open(os.environ['CACHE_FILE_PY'])); print(d.get('seven_resets_at', ''))" 2>/dev/null)
-  api_error=$(CACHE_FILE_PY="$CACHE_FILE_PY" "$PYTHON_CMD" -c "import json,os; d=json.load(open(os.environ['CACHE_FILE_PY'])); print(d.get('api_error', ''))" 2>/dev/null)
+  _cache_out=$(CACHE_FILE_PY="$CACHE_FILE_PY" "$PYTHON_CMD" -c "import json,os; d=json.load(open(os.environ['CACHE_FILE_PY'])); print('%s|%s|%s|%s|%s' % (int(d.get('five_hour_pct',-1)),int(d.get('seven_day_pct',-1)),d.get('five_resets_at',''),d.get('seven_resets_at',''),d.get('api_error','')))" 2>/dev/null)
+  IFS='|' read -r five_pct seven_pct five_resets_at seven_resets_at api_error <<< "$_cache_out"
 else
   # Get OAuth token: try macOS Keychain first, then credentials file (Windows/Linux)
   TOKEN=$(security find-generic-password -s "Claude Code-credentials" -w 2>/dev/null \
