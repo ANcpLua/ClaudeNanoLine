@@ -84,9 +84,12 @@ if [ "$use_cache" = true ]; then
   seven_resets_at=$(python3 -c "import json; d=json.load(open('$CACHE_FILE')); print(d.get('seven_resets_at', ''))" 2>/dev/null)
   api_error=$(python3 -c "import json; d=json.load(open('$CACHE_FILE')); print(d.get('api_error', ''))" 2>/dev/null)
 elif [ "$cache_writable" = true ]; then
-  # Get OAuth token from macOS Keychain
+  # Get OAuth token: try macOS Keychain first, then credentials file (Windows/Linux)
   TOKEN=$(security find-generic-password -s "Claude Code-credentials" -w 2>/dev/null \
     | python3 -c "import json,sys; d=json.load(sys.stdin); print(d['claudeAiOauth']['accessToken'])" 2>/dev/null)
+  if [ -z "$TOKEN" ]; then
+    TOKEN=$(jq -r '.claudeAiOauth.accessToken // empty' "${HOME}/.claude/.credentials.json" 2>/dev/null)
+  fi
 
   if [ -n "$TOKEN" ]; then
     api_resp=$(curl -s --max-time 5 "https://api.anthropic.com/api/oauth/usage" \
