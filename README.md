@@ -59,7 +59,7 @@ chmod +x ~/.claude/claude-nano-line.sh
 
 ## Windows 対応
 
-Git Bash または WSL 上で動作します。自動インストール・手動インストールともに、Git Bash から実行してください。
+Git Bash または WSL 上で動作します。自動インストール・手動インストールともに、お使いの環境（Git Bash または WSL）のシェルから実行してください。
 
 - **認証**: Windows では macOS のキーチェーンが使えないため、`~/.claude/.credentials.json` からトークンを取得します。Claude Code でログイン済みであれば、このファイルは自動で作成されます。
 - **jq**: [chocolatey](https://chocolatey.org/) で `choco install jq`、または [scoop](https://scoop.sh/) で `scoop install jq` でインストールできます。
