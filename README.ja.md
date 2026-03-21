@@ -154,6 +154,7 @@ export CLAUDE_NANO_LINE_THEME=ocean
 | `digits`          | `*_reset`                | 数値                                                                              | `1`                      | 小数桁数（例: `digits:2` → `2.50h`）                                                                  |
 | `format`          | `*_reset_at`             | `auto`/`auto_tz`/`time`/`time_tz`/`datetime`/`datetime_tz`/`full`/`full_tz`/`iso` | `auto`                   | 日時フォーマット（`auto`=今日なら時刻のみ、別日なら`M/D HH:MM`）                                      |
 | `tz`              | `*_reset_at`             | `local` / `utc`                                                                   | `local`                  | 表示タイムゾーン                                                                                      |
+| `on-error`        | `5h_pct`, `7d_pct`, `*_reset`, `*_reset_at` | `hide` / `text(文字列)`                                                    | （エラー文字列を表示）   | API エラー時の表示制御（`hide`=非表示、`text(...)`=カスタム文字列を表示）                             |
 | `dirty-suffix`    | `branch`, `branch_dirty` | 文字列                                                                            | `*` / `""`               | dirty 時に付加するサフィックス（`branch_dirty` デフォルト: `*`、`branch` はデフォルト空でオプトイン） |
 | `dirty-color`     | `branch`, `branch_dirty` | 色名                                                                              | `color` にフォールバック | dirty 時の色                                                                                          |
 | `haiku-color`     | `model`                  | 色名                                                                              | `amber`                  | Haiku モデル時の色                                                                                    |
@@ -200,6 +201,12 @@ export CLAUDE_NANO_LINE_FORMAT="{5h_pct} {model} {cwd} {branch_dirty|color:cyan,
 
 # {branch} にオプトインで dirty マーカーを付加
 export CLAUDE_NANO_LINE_FORMAT="{5h_pct} {model} {cwd} {branch|dirty-suffix:!,dirty-color:red}"
+
+# API エラー時に項目を非表示（サイレントフォールバック）
+export CLAUDE_NANO_LINE_FORMAT="{5h_pct|on-error:hide} {model}"
+
+# API エラー時にカスタムテキストを表示
+export CLAUDE_NANO_LINE_FORMAT="{5h_pct|on-error:text(N/A)} {model}"
 ```
 
 `~/.zprofile` や `~/.bashrc` に `export` 行を追加すれば常時有効になります。
