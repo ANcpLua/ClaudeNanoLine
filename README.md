@@ -160,6 +160,8 @@ The format string is composed of tokens in `{type|options}` form.
 | `format`          | `*_reset_at`             | `auto`/`auto_tz`/`time`/`time_tz`/`datetime`/`datetime_tz`/`full`/`full_tz`/`iso` | `auto`                | Datetime format (`auto`=time if today, `M/D HH:MM` if different day)                                   |
 | `tz`              | `*_reset_at`             | `local` / `utc`                                                                   | `local`               | Timezone for display                                                                                   |
 | `on-error`        | `5h_pct`, `7d_pct`, `*_reset`, `*_reset_at` | `hide` / `text(string)`                                                    | (show error)          | Controls display when an API error occurs (`hide`=hide item, `text(...)`=show custom string)           |
+| `hide-under`      | `ctx_pct`, `5h_pct`, `7d_pct`               | number (%)                                                                 | —                     | Hide the token when usage is below N% (also hides on missing data). Example: `hide-under:70`          |
+| `hide-if`         | `branch`, `branch_dirty`, `model`, `cwd`, `cwd_short`, `cwd_full` | string                                                | —                     | Hide the token when its resolved value equals the given string (exact/case-sensitive match)           |
 | `dirty-suffix`    | `branch`, `branch_dirty` | string                                                                            | `*` / `""`            | Suffix appended when repo is dirty (`branch_dirty` default: `*`; `branch` default: `""` — opt-in only) |
 | `dirty-color`     | `branch`, `branch_dirty` | color name                                                                        | falls back to `color` | Color when repo is dirty                                                                               |
 | `haiku-color`     | `model`                  | color name                                                                        | `amber`               | Color for Haiku model                                                                                  |
@@ -221,6 +223,15 @@ export CLAUDE_NANO_LINE_FORMAT="{5h_pct|on-error:hide} {model}"
 
 # Show custom text on API error
 export CLAUDE_NANO_LINE_FORMAT="{5h_pct|on-error:text(N/A)} {model}"
+
+# Only show usage when it exceeds 70%
+export CLAUDE_NANO_LINE_FORMAT="{5h_pct|hide-under:70} {7d_pct|hide-under:70} {model}"
+
+# Show branch name only when not on main
+export CLAUDE_NANO_LINE_FORMAT="{model} {cwd} {branch|hide-if:main}"
+
+# Hide branch on main, hide usage under 80%
+export CLAUDE_NANO_LINE_FORMAT="{5h_pct|hide-under:80} {model} {branch|hide-if:main}"
 ```
 
 Add the `export` line to `~/.zprofile` or `~/.bashrc` to apply it permanently.

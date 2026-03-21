@@ -155,6 +155,8 @@ export CLAUDE_NANO_LINE_THEME=ocean
 | `format`          | `*_reset_at`             | `auto`/`auto_tz`/`time`/`time_tz`/`datetime`/`datetime_tz`/`full`/`full_tz`/`iso` | `auto`                   | 日時フォーマット（`auto`=今日なら時刻のみ、別日なら`M/D HH:MM`）                                      |
 | `tz`              | `*_reset_at`             | `local` / `utc`                                                                   | `local`                  | 表示タイムゾーン                                                                                      |
 | `on-error`        | `5h_pct`, `7d_pct`, `*_reset`, `*_reset_at` | `hide` / `text(文字列)`                                                    | （エラー文字列を表示）   | API エラー時の表示制御（`hide`=非表示、`text(...)`=カスタム文字列を表示）                             |
+| `hide-under`      | `ctx_pct`, `5h_pct`, `7d_pct`               | 数値（%）                                                                  | —                        | 使用率が N% 未満の場合に非表示にする（データ欠損時も非表示）。例: `hide-under:70`                    |
+| `hide-if`         | `branch`, `branch_dirty`, `model`, `cwd`, `cwd_short`, `cwd_full` | 文字列                                                | —                        | 解決後の値が指定文字列と完全一致（大文字小文字区別）する場合に非表示にする                           |
 | `dirty-suffix`    | `branch`, `branch_dirty` | 文字列                                                                            | `*` / `""`               | dirty 時に付加するサフィックス（`branch_dirty` デフォルト: `*`、`branch` はデフォルト空でオプトイン） |
 | `dirty-color`     | `branch`, `branch_dirty` | 色名                                                                              | `color` にフォールバック | dirty 時の色                                                                                          |
 | `haiku-color`     | `model`                  | 色名                                                                              | `amber`                  | Haiku モデル時の色                                                                                    |
@@ -207,6 +209,15 @@ export CLAUDE_NANO_LINE_FORMAT="{5h_pct|on-error:hide} {model}"
 
 # API エラー時にカスタムテキストを表示
 export CLAUDE_NANO_LINE_FORMAT="{5h_pct|on-error:text(N/A)} {model}"
+
+# 使用率が 70% を超えたときだけ表示
+export CLAUDE_NANO_LINE_FORMAT="{5h_pct|hide-under:70} {7d_pct|hide-under:70} {model}"
+
+# main ブランチ以外のときだけブランチ名を表示
+export CLAUDE_NANO_LINE_FORMAT="{model} {cwd} {branch|hide-if:main}"
+
+# main ブランチでは非表示・使用率 80% 未満は非表示
+export CLAUDE_NANO_LINE_FORMAT="{5h_pct|hide-under:80} {model} {branch|hide-if:main}"
 ```
 
 `~/.zprofile` や `~/.bashrc` に `export` 行を追加すれば常時有効になります。
