@@ -576,6 +576,18 @@ def get_threshold_color(pct_val, opts, warn_pct=DEFAULT_WARN_PCT, crit_pct=DEFAU
         return COLOR_MAP.get(c_normal, "")
 
 
+def _resolve_on_error(opts):
+    raw = opts.get("on-error", "")
+    if not raw:
+        return "default", ""
+    if raw == "hide":
+        return "hide", ""
+    m = re.match(r"^text\((.+)\)$", raw)
+    if m:
+        return "text", m.group(1)
+    return "default", ""
+
+
 def render_custom(fmt, ctx_remaining, usage, model, cwd_real, git_branch, git_dirty=False):
     api_error = usage.get("api_error", "")
     cwd_short = str(Path(cwd_real)).replace(str(Path.home()), "~") if cwd_real else ""
@@ -594,11 +606,13 @@ def render_custom(fmt, ctx_remaining, usage, model, cwd_real, git_branch, git_di
             prefix = prefix_map[name]
 
             if api_error and prefix != "ctx":
+                mode, custom_text = _resolve_on_error(opts)
+                if mode == "hide":
+                    return "", ""
+                if mode == "text":
+                    return custom_text, COLOR_MAP.get(opts.get("color", "light_gray"), "")
                 err_map = {"limit": "Rate Limit", "timeout": "Timeout"}
-                return (
-                    err_map.get(api_error, "Error"),
-                    COLOR_MAP.get(opts.get("color", "light_gray"), ""),
-                )
+                return err_map.get(api_error, "Error"), COLOR_MAP.get(opts.get("color", "light_gray"), "")
 
             if prefix == "ctx":
                 int_val = ctx_used
@@ -618,6 +632,12 @@ def render_custom(fmt, ctx_remaining, usage, model, cwd_real, git_branch, git_di
 
         # reset 系
         if name in ("5h_reset", "7d_reset"):
+            if api_error:
+                mode, custom_text = _resolve_on_error(opts)
+                if mode == "hide":
+                    return "", ""
+                if mode == "text":
+                    return custom_text, COLOR_MAP.get(opts.get("color", ""), "")
             if name == "5h_reset":
                 iso = usage.get("five_resets_at", "")
             else:
@@ -638,6 +658,12 @@ def render_custom(fmt, ctx_remaining, usage, model, cwd_real, git_branch, git_di
             return val, color
 
         if name in ("5h_reset_at", "7d_reset_at"):
+            if api_error:
+                mode, custom_text = _resolve_on_error(opts)
+                if mode == "hide":
+                    return "", ""
+                if mode == "text":
+                    return custom_text, COLOR_MAP.get(opts.get("color", ""), "")
             if name == "5h_reset_at":
                 iso = usage.get("five_resets_at", "")
             else:
