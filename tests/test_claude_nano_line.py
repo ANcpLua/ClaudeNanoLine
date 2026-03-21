@@ -1497,5 +1497,150 @@ class TestOnErrorIntegration(unittest.TestCase):
         self.assertIn("claude-sonnet-4-6", out)
 
 
+# ── 29. TestHideUnder ─────────────────────────────────────────────────────────
+class TestHideUnder(unittest.TestCase):
+    def _render(self, fmt, usage):
+        return strip_ansi(cnl.render_custom(fmt, None, usage, "claude-sonnet-4-6", "/home/user", "main"))
+
+    def _render_ctx(self, fmt, ctx_remaining):
+        return strip_ansi(cnl.render_custom(fmt, ctx_remaining, {}, "claude-sonnet-4-6", "/home/user", "main"))
+
+    def _usage_5h(self, pct):
+        return {"five_hour_pct": pct}
+
+    def _usage_7d(self, pct):
+        return {"seven_day_pct": pct}
+
+    def test_5h_pct_below_threshold_hidden(self):
+        out = self._render("{5h_pct|hide-under:70}", self._usage_5h(42))
+        self.assertEqual(out.strip(), "")
+
+    def test_5h_pct_above_threshold_shown(self):
+        out = self._render("{5h_pct|hide-under:70}", self._usage_5h(85))
+        self.assertIn("85%", out)
+
+    def test_5h_pct_at_threshold_shown(self):
+        # ちょうど N% → 表示される
+        out = self._render("{5h_pct|hide-under:70}", self._usage_5h(70))
+        self.assertIn("70%", out)
+
+    def test_7d_pct_hide_under(self):
+        out = self._render("{7d_pct|hide-under:50}", self._usage_7d(30))
+        self.assertEqual(out.strip(), "")
+
+    def test_7d_pct_shown_above(self):
+        out = self._render("{7d_pct|hide-under:50}", self._usage_7d(60))
+        self.assertIn("60%", out)
+
+    def test_ctx_pct_hide_under(self):
+        # ctx_remaining=70 → ctx_used=30%
+        out = self._render_ctx("{ctx_pct|hide-under:50}", 70)
+        self.assertEqual(out.strip(), "")
+
+    def test_ctx_pct_shown_above(self):
+        # ctx_remaining=10 → ctx_used=90%
+        out = self._render_ctx("{ctx_pct|hide-under:50}", 10)
+        self.assertIn("90%", out)
+
+    def test_missing_data_hidden_when_hide_under_set(self):
+        # データ欠損（-1）→ hide-under 指定時は非表示
+        out = self._render("{5h_pct|hide-under:10}", {})
+        self.assertEqual(out.strip(), "")
+
+    def test_missing_data_shown_without_hide_under(self):
+        # データ欠損（-1）→ hide-under 未指定なら --%
+        out = self._render("{5h_pct}", {})
+        self.assertIn("--%", out)
+
+    def test_api_error_on_error_takes_priority(self):
+        usage = {"api_error": "timeout"}
+        out = self._render("{5h_pct|on-error:text(ERR)|hide-under:10}", usage)
+        self.assertIn("ERR", out)
+
+    def test_invalid_hide_under_ignored(self):
+        # 非数値は無視して通常表示
+        out = self._render("{5h_pct|hide-under:abc}", self._usage_5h(30))
+        self.assertIn("30%", out)
+
+
+# ── 30. TestHideIf ─────────────────────────────────────────────────────────────
+class TestHideIf(unittest.TestCase):
+    def _render(self, fmt, branch="main", dirty=False, model="claude-sonnet-4-6", cwd="/home/user"):
+        return strip_ansi(cnl.render_custom(fmt, 50, {}, model, cwd, branch, dirty))
+
+    def test_branch_matches_hidden(self):
+        out = self._render("{branch|hide-if:main}", branch="main")
+        self.assertEqual(out.strip(), "")
+
+    def test_branch_no_match_shown(self):
+        out = self._render("{branch|hide-if:main}", branch="feat/new-feature")
+        self.assertIn("feat/new-feature", out)
+
+    def test_branch_case_sensitive(self):
+        out = self._render("{branch|hide-if:Main}", branch="main")
+        self.assertIn("main", out)
+
+    def test_branch_dirty_compares_base_name(self):
+        # hide-if は dirty suffix 付加前の branch 名で比較
+        out = self._render("{branch_dirty|hide-if:main|dirty-suffix:*}", branch="main", dirty=True)
+        self.assertEqual(out.strip(), "")
+
+    def test_branch_dirty_no_match_shows_with_suffix(self):
+        out = self._render("{branch_dirty|hide-if:main|dirty-suffix:*}", branch="dev", dirty=True)
+        self.assertIn("dev*", out)
+
+    def test_model_matches_hidden(self):
+        out = self._render("{model|hide-if:claude-sonnet-4-6}", model="claude-sonnet-4-6")
+        self.assertEqual(out.strip(), "")
+
+    def test_model_no_match_shown(self):
+        out = self._render("{model|hide-if:claude-sonnet-4-6}", model="claude-haiku-4-5")
+        self.assertIn("claude-haiku-4-5", out)
+
+    def test_cwd_matches_hidden(self):
+        # cwd は basename
+        out = self._render("{cwd|hide-if:user}", cwd="/home/user")
+        self.assertEqual(out.strip(), "")
+
+    def test_cwd_short_matches_hidden(self):
+        out = self._render("{cwd_short|hide-if:~/dev}", cwd=str(cnl.Path.home()) + "/dev")
+        self.assertEqual(out.strip(), "")
+
+    def test_cwd_full_matches_hidden(self):
+        out = self._render("{cwd_full|hide-if:/home/user}", cwd="/home/user")
+        self.assertEqual(out.strip(), "")
+
+
+# ── 31. TestHideIntegration ────────────────────────────────────────────────────
+class TestHideIntegration(unittest.TestCase):
+    def _render(self, fmt, **kwargs):
+        branch = kwargs.get("branch", "main")
+        dirty = kwargs.get("dirty", False)
+        model = kwargs.get("model", "claude-sonnet-4-6")
+        cwd = kwargs.get("cwd", "/home/user")
+        usage = kwargs.get("usage", {"five_hour_pct": 30})
+        ctx_remaining = kwargs.get("ctx_remaining", 50)
+        return strip_ansi(cnl.render_custom(fmt, ctx_remaining, usage, model, cwd, branch, dirty))
+
+    def test_partial_hide_in_format_string(self):
+        fmt = "{branch|hide-if:main} {5h_pct|hide-under:70} {model}"
+        out = self._render(fmt, branch="main", usage={"five_hour_pct": 30})
+        self.assertNotIn("main", out)
+        self.assertNotIn("30%", out)
+        self.assertIn("claude-sonnet-4-6", out)
+
+    def test_mixed_shown_and_hidden(self):
+        fmt = "{branch|hide-if:main} {model}"
+        out = self._render(fmt, branch="feat/my-feature")
+        self.assertIn("feat/my-feature", out)
+        self.assertIn("claude-sonnet-4-6", out)
+
+    def test_hide_under_shown_in_format(self):
+        fmt = "{5h_pct|hide-under:70} {model}"
+        out = self._render(fmt, usage={"five_hour_pct": 85})
+        self.assertIn("85%", out)
+        self.assertIn("claude-sonnet-4-6", out)
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)
