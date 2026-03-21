@@ -611,8 +611,8 @@ def render_custom(fmt, ctx_remaining, usage, model, cwd_real, git_branch, git_di
                     return "", ""
                 if mode == "text":
                     return custom_text, COLOR_MAP.get(opts.get("color", "light_gray"), "")
-                err_map = {"limit": "Rate Limit", "timeout": "Timeout"}
-                return err_map.get(api_error, "Error"), COLOR_MAP.get(opts.get("color", "light_gray"), "")
+                err_map = {"limit": "Rate Limit", "timeout": "Timeout", "unknown": "Unknown"}
+                return err_map.get(api_error, "Unknown"), COLOR_MAP.get(opts.get("color", "light_gray"), "")
 
             if prefix == "ctx":
                 int_val = ctx_used
@@ -638,6 +638,8 @@ def render_custom(fmt, ctx_remaining, usage, model, cwd_real, git_branch, git_di
                     return "", ""
                 if mode == "text":
                     return custom_text, COLOR_MAP.get(opts.get("color", ""), "")
+                err_map = {"limit": "Rate Limit", "timeout": "Timeout", "unknown": "Unknown"}
+                return err_map.get(api_error, "Unknown"), COLOR_MAP.get(opts.get("color", ""), "")
             if name == "5h_reset":
                 iso = usage.get("five_resets_at", "")
             else:
@@ -664,6 +666,8 @@ def render_custom(fmt, ctx_remaining, usage, model, cwd_real, git_branch, git_di
                     return "", ""
                 if mode == "text":
                     return custom_text, COLOR_MAP.get(opts.get("color", ""), "")
+                err_map = {"limit": "Rate Limit", "timeout": "Timeout", "unknown": "Unknown"}
+                return err_map.get(api_error, "Unknown"), COLOR_MAP.get(opts.get("color", ""), "")
             if name == "5h_reset_at":
                 iso = usage.get("five_resets_at", "")
             else:
