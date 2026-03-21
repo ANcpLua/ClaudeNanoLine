@@ -622,20 +622,22 @@ def render_custom(fmt, ctx_remaining, usage, model, cwd_real, git_branch, git_di
                 int_val = usage.get("seven_day_pct", -1)
 
             hide_under_raw = opts.get("hide-under", "")
+            hide_under_n = None
+            if hide_under_raw:
+                try:
+                    hide_under_n = int(hide_under_raw)
+                except (ValueError, TypeError):
+                    pass
+
             if int_val is None or int_val == -1:
-                if hide_under_raw:
+                if hide_under_n is not None:
                     return "", ""
                 return "--%", COLOR_MAP.get("gray", "")
 
             pct_int = int(int_val)
 
-            if hide_under_raw:
-                try:
-                    hide_under_n = int(hide_under_raw)
-                    if pct_int < hide_under_n:
-                        return "", ""
-                except (ValueError, TypeError):
-                    pass
+            if hide_under_n is not None and pct_int < hide_under_n:
+                return "", ""
 
             val = str(pct_int) + "%"
 
