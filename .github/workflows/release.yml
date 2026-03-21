@@ -103,16 +103,18 @@ jobs:
           VERSION: ${{ inputs.version }}
           CHANGELOG: ${{ steps.changelog.outputs.changelog }}
         run: |
+          printf '%s' "${CHANGELOG}" > changelog_body.txt
           if gh pr view "release/v${VERSION}" --json number >/dev/null 2>&1; then
             gh pr edit "release/v${VERSION}" \
               --title "release: v${VERSION}" \
-              --body "${CHANGELOG}" \
+              --body-file changelog_body.txt \
               --add-label "release"
           else
             gh pr create \
               --base main \
               --head "release/v${VERSION}" \
               --title "release: v${VERSION}" \
-              --body "${CHANGELOG}" \
+              --body-file changelog_body.txt \
               --label "release"
           fi
+          rm changelog_body.txt
