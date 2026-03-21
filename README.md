@@ -159,6 +159,7 @@ The format string is composed of tokens in `{type|options}` form.
 | `digits`          | `*_reset`                | number                                                                            | `1`                   | Decimal places (e.g. `digits:2` → `2.50h`)                                                             |
 | `format`          | `*_reset_at`             | `auto`/`auto_tz`/`time`/`time_tz`/`datetime`/`datetime_tz`/`full`/`full_tz`/`iso` | `auto`                | Datetime format (`auto`=time if today, `M/D HH:MM` if different day)                                   |
 | `tz`              | `*_reset_at`             | `local` / `utc`                                                                   | `local`               | Timezone for display                                                                                   |
+| `on-error`        | `5h_pct`, `7d_pct`, `*_reset`, `*_reset_at` | `hide` / `text(string)`                                                    | (show error)          | Controls display when an API error occurs (`hide`=hide item, `text(...)`=show custom string)           |
 | `dirty-suffix`    | `branch`, `branch_dirty` | string                                                                            | `*` / `""`            | Suffix appended when repo is dirty (`branch_dirty` default: `*`; `branch` default: `""` — opt-in only) |
 | `dirty-color`     | `branch`, `branch_dirty` | color name                                                                        | falls back to `color` | Color when repo is dirty                                                                               |
 | `haiku-color`     | `model`                  | color name                                                                        | `amber`               | Color for Haiku model                                                                                  |
@@ -214,6 +215,12 @@ export CLAUDE_NANO_LINE_FORMAT="{5h_pct} {model} {cwd} {branch_dirty|color:cyan,
 
 # Opt-in dirty marker on {branch} with custom suffix
 export CLAUDE_NANO_LINE_FORMAT="{5h_pct} {model} {cwd} {branch|dirty-suffix:!,dirty-color:red}"
+
+# Hide item on API error (silent fallback)
+export CLAUDE_NANO_LINE_FORMAT="{5h_pct|on-error:hide} {model}"
+
+# Show custom text on API error
+export CLAUDE_NANO_LINE_FORMAT="{5h_pct|on-error:text(N/A)} {model}"
 ```
 
 Add the `export` line to `~/.zprofile` or `~/.bashrc` to apply it permanently.

@@ -1385,5 +1385,117 @@ class TestThemePresets(unittest.TestCase):
             self.assertEqual(fmt, "")
 
 
+# ── 24. TestResolveOnError ─────────────────────────────────────────────────────
+class TestResolveOnError(unittest.TestCase):
+    def test_empty_string_returns_default(self):
+        self.assertEqual(cnl._resolve_on_error({}), ("default", ""))
+
+    def test_hide_returns_hide(self):
+        self.assertEqual(cnl._resolve_on_error({"on-error": "hide"}), ("hide", ""))
+
+    def test_text_returns_text_and_string(self):
+        self.assertEqual(cnl._resolve_on_error({"on-error": "text(N/A)"}), ("text", "N/A"))
+
+    def test_text_with_emoji(self):
+        self.assertEqual(cnl._resolve_on_error({"on-error": "text(⚠)"}), ("text", "⚠"))
+
+    def test_text_with_spaces(self):
+        self.assertEqual(cnl._resolve_on_error({"on-error": "text(err)"}), ("text", "err"))
+
+    def test_unknown_value_returns_default(self):
+        self.assertEqual(cnl._resolve_on_error({"on-error": "something_invalid"}), ("default", ""))
+
+
+# ── 25. TestOnErrorPct ─────────────────────────────────────────────────────────
+class TestOnErrorPct(unittest.TestCase):
+    _USAGE_ERROR = {"api_error": "timeout"}
+    _USAGE_LIMIT = {"api_error": "limit"}
+
+    def _render(self, fmt, usage):
+        return strip_ansi(cnl.render_custom(fmt, 70, usage, "claude-sonnet-4-6", "/home/user", "main"))
+
+    def test_pct_hide_on_timeout(self):
+        out = self._render("{5h_pct|on-error:hide}", self._USAGE_ERROR)
+        self.assertEqual(out.strip(), "")
+
+    def test_pct_text_on_timeout(self):
+        out = self._render("{5h_pct|on-error:text(N/A)}", self._USAGE_ERROR)
+        self.assertIn("N/A", out)
+
+    def test_pct_text_on_limit(self):
+        out = self._render("{5h_pct|on-error:text(---)}", self._USAGE_LIMIT)
+        self.assertIn("---", out)
+
+    def test_pct_default_shows_error_string(self):
+        out = self._render("{5h_pct}", self._USAGE_ERROR)
+        self.assertIn("Timeout", out)
+
+    def test_pct_default_shows_rate_limit(self):
+        out = self._render("{7d_pct}", self._USAGE_LIMIT)
+        self.assertIn("Rate Limit", out)
+
+    def test_ctx_pct_not_affected_by_api_error(self):
+        out = self._render("{ctx_pct}", self._USAGE_ERROR)
+        # ctx_pct は API 非依存なので "Timeout" にはならない
+        self.assertNotIn("Timeout", out)
+
+
+# ── 26. TestOnErrorReset ───────────────────────────────────────────────────────
+class TestOnErrorReset(unittest.TestCase):
+    _USAGE_ERROR = {"api_error": "timeout"}
+
+    def _render(self, fmt, usage):
+        return strip_ansi(cnl.render_custom(fmt, 70, usage, "claude-sonnet-4-6", "/home/user", "main"))
+
+    def test_reset_hide(self):
+        out = self._render("{5h_reset|on-error:hide}", self._USAGE_ERROR)
+        self.assertEqual(out.strip(), "")
+
+    def test_reset_text(self):
+        out = self._render("{5h_reset|on-error:text(N/A)}", self._USAGE_ERROR)
+        self.assertIn("N/A", out)
+
+    def test_7d_reset_hide(self):
+        out = self._render("{7d_reset|on-error:hide}", self._USAGE_ERROR)
+        self.assertEqual(out.strip(), "")
+
+
+# ── 27. TestOnErrorResetAt ─────────────────────────────────────────────────────
+class TestOnErrorResetAt(unittest.TestCase):
+    _USAGE_ERROR = {"api_error": "unknown"}
+
+    def _render(self, fmt, usage):
+        return strip_ansi(cnl.render_custom(fmt, 70, usage, "claude-sonnet-4-6", "/home/user", "main"))
+
+    def test_reset_at_hide(self):
+        out = self._render("{5h_reset_at|on-error:hide}", self._USAGE_ERROR)
+        self.assertEqual(out.strip(), "")
+
+    def test_reset_at_text(self):
+        out = self._render("{5h_reset_at|on-error:text(?)}", self._USAGE_ERROR)
+        self.assertIn("?", out)
+
+    def test_7d_reset_at_text(self):
+        out = self._render("{7d_reset_at|on-error:text(ERR)}", self._USAGE_ERROR)
+        self.assertIn("ERR", out)
+
+
+# ── 28. TestOnErrorIntegration ─────────────────────────────────────────────────
+class TestOnErrorIntegration(unittest.TestCase):
+    _USAGE_ERROR = {"api_error": "timeout"}
+
+    def test_mixed_format_with_hide(self):
+        fmt = "{5h_pct|on-error:hide} {model}"
+        out = strip_ansi(cnl.render_custom(fmt, 70, self._USAGE_ERROR, "claude-haiku-4-5", "/home/user", "main"))
+        self.assertNotIn("Timeout", out)
+        self.assertIn("claude-haiku-4-5", out)
+
+    def test_mixed_format_with_text(self):
+        fmt = "{5h_pct|on-error:text(N/A)} {7d_reset|on-error:text(N/A)} {model}"
+        out = strip_ansi(cnl.render_custom(fmt, 70, self._USAGE_ERROR, "claude-sonnet-4-6", "/home/user", "main"))
+        self.assertIn("N/A", out)
+        self.assertIn("claude-sonnet-4-6", out)
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)
