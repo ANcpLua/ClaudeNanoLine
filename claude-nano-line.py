@@ -621,10 +621,22 @@ def render_custom(fmt, ctx_remaining, usage, model, cwd_real, git_branch, git_di
             else:  # 7d
                 int_val = usage.get("seven_day_pct", -1)
 
+            hide_under_raw = opts.get("hide-under", "")
             if int_val is None or int_val == -1:
+                if hide_under_raw:
+                    return "", ""
                 return "--%", COLOR_MAP.get("gray", "")
 
             pct_int = int(int_val)
+
+            if hide_under_raw:
+                try:
+                    hide_under_n = int(hide_under_raw)
+                    if pct_int < hide_under_n:
+                        return "", ""
+                except (ValueError, TypeError):
+                    pass
+
             val = str(pct_int) + "%"
 
             color = get_threshold_color(pct_int, opts)
@@ -681,6 +693,8 @@ def render_custom(fmt, ctx_remaining, usage, model, cwd_real, git_branch, git_di
         # model
         if name == "model":
             val = model
+            if opts.get("hide-if", "") == val:
+                return "", ""
             blanket = opts.get("color", "")
             if blanket:
                 color = COLOR_MAP.get(blanket, "")
@@ -698,14 +712,25 @@ def render_custom(fmt, ctx_remaining, usage, model, cwd_real, git_branch, git_di
 
         # cwd 系
         if name == "cwd":
-            return cwd_base, COLOR_MAP.get(opts.get("color", ""), "")
+            val = cwd_base
+            if opts.get("hide-if", "") == val:
+                return "", ""
+            return val, COLOR_MAP.get(opts.get("color", ""), "")
         if name == "cwd_short":
-            return cwd_short, COLOR_MAP.get(opts.get("color", ""), "")
+            val = cwd_short
+            if opts.get("hide-if", "") == val:
+                return "", ""
+            return val, COLOR_MAP.get(opts.get("color", ""), "")
         if name == "cwd_full":
-            return cwd_real or "", COLOR_MAP.get(opts.get("color", ""), "")
+            val = cwd_real or ""
+            if opts.get("hide-if", "") == val:
+                return "", ""
+            return val, COLOR_MAP.get(opts.get("color", ""), "")
 
         # branch
         if name == "branch":
+            if opts.get("hide-if", "") == git_branch:
+                return "", ""
             suffix = opts.get("dirty-suffix", "")
             if suffix and git_dirty:
                 dc = opts.get("dirty-color", "")
@@ -714,6 +739,8 @@ def render_custom(fmt, ctx_remaining, usage, model, cwd_real, git_branch, git_di
             return git_branch, COLOR_MAP.get(opts.get("color", ""), "")
 
         if name == "branch_dirty":
+            if opts.get("hide-if", "") == git_branch:
+                return "", ""
             suffix = opts.get("dirty-suffix", "*")
             if git_dirty:
                 dc = opts.get("dirty-color", "")
