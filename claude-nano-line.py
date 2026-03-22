@@ -828,8 +828,12 @@ def render_custom(fmt, ctx_remaining, usage, model, cwd_real, git_branch, git_di
             try:
                 timeout = int(opts.get("timeout", CMD_TIMEOUT))
                 proc = subprocess.Popen(
-                    command, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-                    text=True, start_new_session=True,
+                    command,
+                    shell=True,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE,
+                    text=True,
+                    start_new_session=True,
                 )
                 try:
                     stdout, _ = proc.communicate(timeout=timeout)
