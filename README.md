@@ -1,35 +1,41 @@
 # ClaudeNanoLine
 
-[日本語版はこちら](README.ja.md)
+[Japanese version](README.ja.md)
 
 ![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)
-![macOS](https://img.shields.io/badge/macOS-supported-brightgreen)
-![Windows](https://img.shields.io/badge/Windows-supported-brightgreen)
-![Linux](https://img.shields.io/badge/Linux-supported-brightgreen)
+![macOS](https://img.shields.io/badge/macOS-supported-5a8a6a.svg)
+![Windows](https://img.shields.io/badge/Windows-supported-5a8a6a.svg)
+![Linux](https://img.shields.io/badge/Linux-supported-5a8a6a.svg)
 
-A single-line Claude Code status bar showing API usage (5-hour and 7-day
-windows) and time until reset.
+A format-string-driven [statusLine](https://docs.anthropic.com/en/docs/claude-code/settings) for Claude Code. Show exactly what you want, the way you want it.
 
-![demo](demo.png)
+![demo](.github/assets/demo.png)
 
-## Script
+## Features
 
-### `claude-nano-line.py`
+Like a shell `$PS1`, **a single format string controls what's displayed, how it's colored, and when items appear or hide**.
 
-A command to set as the Claude Code
-[statusLine](https://docs.anthropic.com/en/docs/claude-code/settings).
+```bash
+export CLAUDE_NANO_LINE_FORMAT="{5h_pct} {7d_pct} {model} {cwd} ({branch})"
+```
 
-Displays the following in your terminal status bar:
+- **Rich data** — API usage (5h / 7d), time until reset, context consumption, model name, Git branch, working directory, and more
+- **Fine-grained control** — color thresholds, conditional visibility, time format overrides — all configurable per item
+- **Theme presets** — pick from `ocean`, `nerd`, and others without writing a format string
+- **Lightweight** — single Python file, no external packages. API responses cached for 360 seconds
 
-- **Working directory** and **Git branch**
-- **Active model name**
-- **Context usage** (color-coded: green / yellow / red)
-- **API usage**: 5-hour and 7-day window utilization % and time until reset
+## Quick Start
 
-API usage is fetched from the Anthropic API using an OAuth token (macOS
-Keychain, or `~/.claude/.credentials.json` on Windows/Linux). Results are cached
-for 360 seconds at `$XDG_CACHE_HOME/claude-nano-line/claude-usage-cache.json`
-(default: `~/.cache/claude-nano-line/`).
+```sh
+# 1. Install
+curl -fsSL https://raw.githubusercontent.com/HappyOnigiri/ClaudeNanoLine/main/setup.sh | bash
+
+# 2. Set your preferred format (optional — defaults are sensible)
+export CLAUDE_NANO_LINE_FORMAT="{5h_pct} {model} {cwd} ({branch})"
+
+# 3. Launch Claude Code — the status line appears immediately
+claude
+```
 
 ## Setup
 
@@ -83,6 +89,8 @@ Bash or WSL shell.
 
 Set `CLAUDE_NANO_LINE_THEME` to use a built-in theme without writing a format
 string:
+
+![themes](.github/assets/themes.png)
 
 ```sh
 export CLAUDE_NANO_LINE_THEME=ocean
@@ -175,6 +183,8 @@ The format string is composed of tokens in `{type|options}` form.
 
 ### Examples
 
+![examples](.github/assets/examples.png)
+
 ```bash
 # Simple display
 export CLAUDE_NANO_LINE_FORMAT="{5h_pct} {7d_pct} {model}"
@@ -259,3 +269,7 @@ The API rate limit was hit. It will recover automatically after a short wait.
 Detailed API call logs are written to
 `$XDG_STATE_HOME/claude-nano-line/claude-usage-api.log` (default:
 `~/.local/state/claude-nano-line/`), which can help diagnose issues.
+
+## Contributing
+
+Issues and pull requests are welcome — bug reports, feature ideas, documentation improvements, anything helps.
