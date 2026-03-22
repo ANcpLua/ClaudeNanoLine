@@ -132,6 +132,27 @@ The format string is composed of tokens in `{type|options}` form.
 {text: | |color:gray}
 ```
 
+**Shell command output**: `{cmd:command}` or `{cmd:`command`|options}`
+
+Runs a shell command and embeds its stdout into the status line.
+
+```
+{cmd:date +%H:%M}
+{cmd:date +%H:%M|color:cyan}
+{cmd:`uptime | awk '{print $NF}'`|color:yellow}
+```
+
+Use backticks when the command contains `|`, `:`, or `}`. Inside backticks, `` \` `` is a literal backtick and `\\` is a literal backslash.
+
+> **Tip — quoting the environment variable**: If your command contains double quotes (e.g. `date "+%Y-%m-%d %H:%M"`), wrap the entire `export` value in single quotes so the shell does not strip them:
+> ```bash
+> export CLAUDE_NANO_LINE_FORMAT='{cmd:date "+%Y-%m-%d %H:%M"|color:cyan} {model}'
+> ```
+> To keep double quotes on the outside, escape the inner double quotes with `\"`:
+> ```bash
+> export CLAUDE_NANO_LINE_FORMAT="{cmd:date \"+%Y-%m-%d %H:%M\"|color:cyan} {model}"
+> ```
+
 ### Placeholder reference
 
 | Name               | Example           | Description                                                            |
@@ -167,7 +188,8 @@ The format string is composed of tokens in `{type|options}` form.
 | `digits`          | `*_reset`                | number                                                                            | `1`                   | Decimal places (e.g. `digits:2` → `2.50h`)                                                             |
 | `format`          | `*_reset_at`             | `auto`/`auto_tz`/`time`/`time_tz`/`datetime`/`datetime_tz`/`full`/`full_tz`/`iso` | `auto`                | Datetime format (`auto`=time if today, `M/D HH:MM` if different day)                                   |
 | `tz`              | `*_reset_at`             | `local` / `utc`                                                                   | `local`               | Timezone for display                                                                                   |
-| `on-error`        | `5h_pct`, `7d_pct`, `*_reset`, `*_reset_at` | `hide` / `text(string)`                                                    | (show error)          | Controls display when an API error occurs (`hide`=hide item, `text(...)`=show custom string)           |
+| `on-error`        | `5h_pct`, `7d_pct`, `*_reset`, `*_reset_at`, `cmd` | `hide` / `text(string)`                                               | (show error)          | Controls display when an API error occurs or a command fails (`hide`=hide item, `text(...)`=show custom string) |
+| `timeout`         | `cmd`                    | number (seconds)                                                                  | `2`                   | Command execution timeout. If exceeded, output is empty                                                |
 | `hide-under`      | `ctx_pct`, `5h_pct`, `7d_pct`               | number (%)                                                                 | —                     | Hide the token when usage is below N% (also hides on missing data). Example: `hide-under:70`          |
 | `hide-if`         | `branch`, `branch_dirty`, `model`, `cwd`, `cwd_short`, `cwd_full` | string                                                | —                     | Hide the token when its resolved value equals the given string (exact/case-sensitive match)           |
 | `dirty-suffix`    | `branch`, `branch_dirty` | string                                                                            | `*` / `""`            | Suffix appended when repo is dirty (`branch_dirty` default: `*`; `branch` default: `""` — opt-in only) |
@@ -242,6 +264,18 @@ export CLAUDE_NANO_LINE_FORMAT="{model} {cwd} {branch|hide-if:main}"
 
 # Hide branch on main, hide usage under 80%
 export CLAUDE_NANO_LINE_FORMAT="{5h_pct|hide-under:80} {model} {branch|hide-if:main}"
+
+# Current time in cyan (simple command, no pipes)
+export CLAUDE_NANO_LINE_FORMAT="{cmd:date +%H:%M|color:cyan} {model}"
+
+# Use single quotes when the command itself contains double quotes
+export CLAUDE_NANO_LINE_FORMAT='{cmd:date "+%Y-%m-%d %H:%M"|color:cyan} {model}'
+
+# Load average via pipe (use backticks when command contains |)
+export CLAUDE_NANO_LINE_FORMAT="{cmd:\`uptime | awk '{print \$NF}'\`|color:yellow} {model}"
+
+# Fallback text when command fails
+export CLAUDE_NANO_LINE_FORMAT="{cmd:false|on-error:text(N/A)} {model}"
 ```
 
 Add the `export` line to `~/.zprofile` or `~/.bashrc` to apply it permanently.
