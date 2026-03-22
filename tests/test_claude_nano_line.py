@@ -1687,12 +1687,12 @@ class TestCmdToken(unittest.TestCase):
     def test_backtick_escaped_backtick(self):
         # \` エスケープがパーサーによって ` に復元されコマンド文字列に渡されることを確認
 
-        mock_result = MagicMock()
-        mock_result.returncode = 0
-        mock_result.stdout = "`hello`\n"
-        with patch.object(cnl.subprocess, "run", return_value=mock_result) as mock_run:
+        mock_proc = MagicMock()
+        mock_proc.communicate.return_value = ("`hello`\n", "")
+        mock_proc.returncode = 0
+        with patch.object(cnl.subprocess, "Popen", return_value=mock_proc) as mock_popen:
             out = strip_ansi(self._render(r"{cmd:`echo \`hello\``}"))
-            called_cmd = mock_run.call_args[0][0]
+            called_cmd = mock_popen.call_args[0][0]
         # コマンド文字列にリテラルのバッククォートが含まれていること
         self.assertIn("`hello`", called_cmd)
         # 出力はコマンドの stdout.strip()
@@ -1700,12 +1700,12 @@ class TestCmdToken(unittest.TestCase):
 
     def test_backtick_escaped_backslash(self):
         # \\ エスケープがパーサーによって \ に復元されコマンド文字列に渡されることを確認
-        mock_result = MagicMock()
-        mock_result.returncode = 0
-        mock_result.stdout = "hello\n"
-        with patch.object(cnl.subprocess, "run", return_value=mock_result) as mock_run:
+        mock_proc = MagicMock()
+        mock_proc.communicate.return_value = ("hello\n", "")
+        mock_proc.returncode = 0
+        with patch.object(cnl.subprocess, "Popen", return_value=mock_proc) as mock_popen:
             self._render(r"{cmd:`echo \\n`}")
-            called_cmd = mock_run.call_args[0][0]
+            called_cmd = mock_popen.call_args[0][0]
         # \\ が単一の \ に復元されてコマンドに渡されること
         self.assertIn("\\n", called_cmd)
         self.assertNotIn("\\\\n", called_cmd)
