@@ -799,7 +799,12 @@ def render_custom(fmt, ctx_remaining, usage, model, cwd_real, git_branch, git_di
                         break
                     else:
                         i += 1
-                command = body[1:i].replace("\\`", "`")  # \` → ` に復元
+                command = (
+                    body[1:i]
+                    .replace("\\\\", "\x00")  # \\ を一時プレースホルダーに
+                    .replace("\\`", "`")  # \` → `
+                    .replace("\x00", "\\")  # プレースホルダー → \
+                )  # \\ → \、\` → ` に復元
                 rest = body[i + 1 :]  # "|color:red" 等
                 opts = {}
                 if rest.startswith("|"):
