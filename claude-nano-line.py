@@ -827,12 +827,27 @@ def render_custom(fmt, ctx_remaining, usage, model, cwd_real, git_branch, git_di
             # コマンド実行
             try:
                 timeout = int(opts.get("timeout", CMD_TIMEOUT))
-                result = subprocess.run(command, shell=True, capture_output=True, text=True, timeout=timeout)
-                val = result.stdout.strip() if result.returncode == 0 else ""
+                proc = subprocess.Popen(
+                    command, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                    text=True, start_new_session=True,
+                )
+                try:
+                    stdout, _ = proc.communicate(timeout=timeout)
+                    success = proc.returncode == 0
+                    val = stdout.strip()
+                except subprocess.TimeoutExpired:
+                    try:
+                        os.killpg(proc.pid, signal.SIGTERM)
+                    except ProcessLookupError:
+                        pass
+                    proc.wait()
+                    success = False
+                    val = ""
             except Exception:
+                success = False
                 val = ""
 
-            if not val:
+            if not success:
                 mode, err_text = _resolve_on_error(opts)
                 if mode == "hide":
                     return ""
