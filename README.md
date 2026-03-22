@@ -270,6 +270,10 @@ Detailed API call logs are written to
 `$XDG_STATE_HOME/claude-nano-line/claude-usage-api.log` (default:
 `~/.local/state/claude-nano-line/`), which can help diagnose issues.
 
+### Claude Code memory usage grows very high (macOS)
+
+If Claude Code’s resident memory (RSS) balloons during long idle or active sessions and the system becomes sluggish or unresponsive, the cause is not well understood, but it may be more likely when using a custom status line. See [this Zenn article](https://zenn.dev/happy_onigiri/articles/9ae9080ba5eb88) for how to recognize the issue, recover manually, and optionally run a `launchd` watchdog that stops runaway processes before the Mac freezes. *(Japanese only.)*
+
 ## Contributing
 
 Issues and pull requests are welcome — bug reports, feature ideas, documentation improvements, anything helps.
