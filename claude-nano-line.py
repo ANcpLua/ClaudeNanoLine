@@ -841,10 +841,13 @@ def render_custom(fmt, ctx_remaining, usage, model, cwd_real, git_branch, git_di
                     val = stdout.strip() if success else ""
                 except subprocess.TimeoutExpired:
                     try:
-                        os.killpg(proc.pid, signal.SIGTERM)
+                        if hasattr(os, "killpg"):
+                            os.killpg(proc.pid, signal.SIGTERM)
+                        else:
+                            proc.terminate()
                     except ProcessLookupError:
                         pass
-                    proc.wait()
+                    proc.communicate()
                     success = False
                     val = ""
             except Exception:
