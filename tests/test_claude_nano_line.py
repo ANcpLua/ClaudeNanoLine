@@ -1698,6 +1698,18 @@ class TestCmdToken(unittest.TestCase):
         # 出力はコマンドの stdout.strip()
         self.assertEqual(out, "`hello`")
 
+    def test_backtick_escaped_backslash(self):
+        # \\ エスケープがパーサーによって \ に復元されコマンド文字列に渡されることを確認
+        mock_result = MagicMock()
+        mock_result.returncode = 0
+        mock_result.stdout = "hello\n"
+        with patch.object(cnl.subprocess, "run", return_value=mock_result) as mock_run:
+            self._render(r"{cmd:`echo \\n`}")
+            called_cmd = mock_run.call_args[0][0]
+        # \\ が単一の \ に復元されてコマンドに渡されること
+        self.assertIn("\\n", called_cmd)
+        self.assertNotIn("\\\\n", called_cmd)
+
     def test_timeout(self):
         # タイムアウトで空文字が返る
         out = strip_ansi(self._render("{cmd:sleep 10|timeout:1}"))
