@@ -1719,6 +1719,15 @@ class TestCmdToken(unittest.TestCase):
         out = strip_ansi(self._render("{cmd:false}"))
         self.assertEqual(out, "")
 
+    def test_command_failure_with_stdout_suppressed(self):
+        # 失敗コマンドの stdout は on-error 指定なしでも表示しない
+        mock_proc = MagicMock()
+        mock_proc.communicate.return_value = ("partial\n", "")
+        mock_proc.returncode = 1
+        with patch.object(cnl.subprocess, "Popen", return_value=mock_proc):
+            out = strip_ansi(self._render("{cmd:echo partial; exit 1}"))
+        self.assertEqual(out, "")
+
     def test_on_error_text(self):
         out = strip_ansi(self._render("{cmd:false|on-error:text(N/A)}"))
         self.assertEqual(out, "N/A")

@@ -838,7 +838,7 @@ def render_custom(fmt, ctx_remaining, usage, model, cwd_real, git_branch, git_di
                 try:
                     stdout, _ = proc.communicate(timeout=timeout)
                     success = proc.returncode == 0
-                    val = stdout.strip()
+                    val = stdout.strip() if success else ""
                 except subprocess.TimeoutExpired:
                     try:
                         os.killpg(proc.pid, signal.SIGTERM)
