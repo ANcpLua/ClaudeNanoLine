@@ -870,7 +870,7 @@ def render_custom(fmt, ctx_remaining, usage, model, cwd_real, git_branch, git_di
             return color + val + RESET
         return val
 
-    return re.sub(r"\{((?:[^}`]|`(?:[^`\\]|\\.)*`)+)\}", lambda m: process_token(m.group(1)), fmt)
+    return re.sub(r"\{(cmd:`(?:[^`\\]|\\.)*`[^}]*|[^}]+)\}", lambda m: process_token(m.group(1)), fmt)
 
 
 # ── Main ────────────────────────────────────────────────────────────────────────
