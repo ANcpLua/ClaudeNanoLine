@@ -1642,5 +1642,89 @@ class TestHideIntegration(unittest.TestCase):
         self.assertIn("claude-sonnet-4-6", out)
 
 
+# ── TestCmdToken ───────────────────────────────────────────────────────────────
+class TestCmdToken(unittest.TestCase):
+    """Tests for {cmd:...} token in render_custom."""
+
+    def _usage(self):
+        return {"five_hour_pct": 42, "seven_day_pct": 60, "five_resets_at": "", "seven_resets_at": ""}
+
+    def _render(self, fmt, model="sonnet", branch="main"):
+        return cnl.render_custom(fmt, None, self._usage(), model, "/home/user/project", branch, False)
+
+    def test_basic_echo(self):
+        out = strip_ansi(self._render("{cmd:echo hello}"))
+        self.assertEqual(out, "hello")
+
+    def test_backtick_basic(self):
+        out = strip_ansi(self._render("{cmd:`echo hello`}"))
+        self.assertEqual(out, "hello")
+
+    def test_color_option(self):
+        out = self._render("{cmd:echo hello|color:cyan}")
+        self.assertIn(cnl.COLOR_MAP["cyan"], out)
+        self.assertIn("hello", out)
+
+    def test_backtick_with_pipe(self):
+        out = strip_ansi(self._render("{cmd:`echo HELLO | tr A-Z a-z`}"))
+        self.assertEqual(out, "hello")
+
+    def test_backtick_with_color(self):
+        out = self._render("{cmd:`echo hi`|color:red}")
+        self.assertIn(cnl.COLOR_MAP["red"], out)
+        self.assertIn("hi", out)
+
+    def test_backtick_with_closing_brace(self):
+        # awk コマンド内の } がパースを壊さないことを確認
+        out = strip_ansi(self._render("{cmd:`echo hello | awk '{print}'`}"))
+        self.assertEqual(out, "hello")
+
+    def test_backtick_with_colon(self):
+        # date +%H:%M:%S 形式: 数字:数字:数字 パターンに一致することを確認
+        out = strip_ansi(self._render("{cmd:`date +%H:%M:%S`}"))
+        self.assertRegex(out, r"^\d{2}:\d{2}:\d{2}$")
+
+    def test_backtick_escaped_backtick(self):
+        # \` エスケープがパーサーによって ` に復元されコマンド文字列に渡されることを確認
+
+        mock_result = MagicMock()
+        mock_result.returncode = 0
+        mock_result.stdout = "`hello`\n"
+        with patch.object(cnl.subprocess, "run", return_value=mock_result) as mock_run:
+            out = strip_ansi(self._render(r"{cmd:`echo \`hello\``}"))
+            called_cmd = mock_run.call_args[0][0]
+        # コマンド文字列にリテラルのバッククォートが含まれていること
+        self.assertIn("`hello`", called_cmd)
+        # 出力はコマンドの stdout.strip()
+        self.assertEqual(out, "`hello`")
+
+    def test_timeout(self):
+        # タイムアウトで空文字が返る
+        out = strip_ansi(self._render("{cmd:sleep 10|timeout:1}"))
+        self.assertEqual(out, "")
+
+    def test_command_failure(self):
+        out = strip_ansi(self._render("{cmd:false}"))
+        self.assertEqual(out, "")
+
+    def test_on_error_text(self):
+        out = strip_ansi(self._render("{cmd:false|on-error:text(N/A)}"))
+        self.assertEqual(out, "N/A")
+
+    def test_on_error_hide(self):
+        out = strip_ansi(self._render("{cmd:false|on-error:hide}"))
+        self.assertEqual(out, "")
+
+    def test_mixed_with_other_tokens(self):
+        out = strip_ansi(self._render("{model} {cmd:echo ok}"))
+        self.assertIn("sonnet", out)
+        self.assertIn("ok", out)
+
+    def test_no_color_when_empty(self):
+        # コマンド失敗時、色コードが出力されない
+        out = self._render("{cmd:false|color:cyan}")
+        self.assertNotIn(cnl.COLOR_MAP["cyan"], out)
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)
