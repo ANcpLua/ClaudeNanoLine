@@ -127,6 +127,27 @@ export CLAUDE_NANO_LINE_THEME=ocean
 {text: | |color:gray}
 ```
 
+**シェルコマンドの出力**: `{cmd:コマンド}` または `` {cmd:`コマンド`|options} ``
+
+シェルコマンドを実行し、その標準出力をステータスラインに埋め込みます。
+
+```
+{cmd:date +%H:%M}
+{cmd:date +%H:%M|color:cyan}
+{cmd:`uptime | awk '{print $NF}'`|color:yellow}
+```
+
+コマンドに `|`、`:`、`}` が含まれる場合はバッククォートで囲みます。バッククォート内では `` \` `` でリテラルのバッククォート、`\\` でリテラルのバックスラッシュを表します。
+
+> **Tip — 環境変数のクォート**: コマンドにダブルクォートが含まれる場合（例: `date "+%Y-%m-%d %H:%M"`）、`export` の値全体をシングルクォートで囲むとシェルに剥がされずに済みます：
+> ```bash
+> export CLAUDE_NANO_LINE_FORMAT='{cmd:date "+%Y-%m-%d %H:%M"|color:cyan} {model}'
+> ```
+> ダブルクォートのまま書きたい場合は内側のダブルクォートを `\"` でエスケープします：
+> ```bash
+> export CLAUDE_NANO_LINE_FORMAT="{cmd:date \"+%Y-%m-%d %H:%M\"|color:cyan} {model}"
+> ```
+
 ### プレースホルダー一覧
 
 | 名前               | 出力例            | 説明                                                                  |
@@ -162,7 +183,8 @@ export CLAUDE_NANO_LINE_THEME=ocean
 | `digits`          | `*_reset`                | 数値                                                                              | `1`                      | 小数桁数（例: `digits:2` → `2.50h`）                                                                  |
 | `format`          | `*_reset_at`             | `auto`/`auto_tz`/`time`/`time_tz`/`datetime`/`datetime_tz`/`full`/`full_tz`/`iso` | `auto`                   | 日時フォーマット（`auto`=今日なら時刻のみ、別日なら`M/D HH:MM`）                                      |
 | `tz`              | `*_reset_at`             | `local` / `utc`                                                                   | `local`                  | 表示タイムゾーン                                                                                      |
-| `on-error`        | `5h_pct`, `7d_pct`, `*_reset`, `*_reset_at` | `hide` / `text(文字列)`                                                    | （エラー文字列を表示）   | API エラー時の表示制御（`hide`=非表示、`text(...)`=カスタム文字列を表示）                             |
+| `on-error`        | `5h_pct`, `7d_pct`, `*_reset`, `*_reset_at`, `cmd` | `hide` / `text(文字列)`                                               | （エラー文字列を表示）   | API エラーまたはコマンド失敗時の表示制御（`hide`=非表示、`text(...)`=カスタム文字列を表示）          |
+| `timeout`         | `cmd`                    | 数値（秒）                                                                        | `2`                      | コマンド実行のタイムアウト秒数。超過時は空文字を返す                                                  |
 | `hide-under`      | `ctx_pct`, `5h_pct`, `7d_pct`               | 数値（%）                                                                  | —                        | 使用率が N% 未満の場合に非表示にする（データ欠損時も非表示）。例: `hide-under:70`                    |
 | `hide-if`         | `branch`, `branch_dirty`, `model`, `cwd`, `cwd_short`, `cwd_full` | 文字列                                                | —                        | 解決後の値が指定文字列と完全一致（大文字小文字区別）する場合に非表示にする                           |
 | `dirty-suffix`    | `branch`, `branch_dirty` | 文字列                                                                            | `*` / `""`               | dirty 時に付加するサフィックス（`branch_dirty` デフォルト: `*`、`branch` はデフォルト空でオプトイン） |
@@ -237,6 +259,18 @@ export CLAUDE_NANO_LINE_FORMAT="{model} {cwd} {branch|hide-if:main}"
 
 # main ブランチでは非表示・使用率 80% 未満は非表示
 export CLAUDE_NANO_LINE_FORMAT="{5h_pct|hide-under:80} {model} {branch|hide-if:main}"
+
+# 現在時刻を cyan で表示（シンプルなコマンド、パイプなし）
+export CLAUDE_NANO_LINE_FORMAT="{cmd:date +%H:%M|color:cyan} {model}"
+
+# コマンド内にダブルクォートが含まれる場合は、外側をシングルクォートで囲む
+export CLAUDE_NANO_LINE_FORMAT='{cmd:date "+%Y-%m-%d %H:%M"|color:cyan} {model}'
+
+# ロードアベレージをパイプで加工（| を含むコマンドはバッククォートで囲む）
+export CLAUDE_NANO_LINE_FORMAT="{cmd:\`uptime | awk '{print \$NF}'\`|color:yellow} {model}"
+
+# コマンド失敗時にフォールバックテキストを表示
+export CLAUDE_NANO_LINE_FORMAT="{cmd:false|on-error:text(N/A)} {model}"
 ```
 
 `~/.zprofile` や `~/.bashrc` に `export` 行を追加すれば常時有効になります。
