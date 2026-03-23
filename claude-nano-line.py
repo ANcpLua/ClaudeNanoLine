@@ -343,7 +343,7 @@ def fmt_reset_time(iso_str, fmt_type="auto"):
                 return str(secs // 60) + "m"
             elif secs < 36000:
                 return "{:.1f}h".format(secs / 3600)
-            elif secs < 86400:
+            elif secs < 90000:
                 return str(secs // 3600) + "h" + str((secs % 3600) // 60).zfill(2) + "m"
             else:
                 days = secs // 86400
@@ -384,7 +384,7 @@ def fmt_reset_time_v2(iso_str, unit="auto", digits=1):
             elif secs < 36000:
                 h = secs / 3600
                 return f"{h:{fmt}}h"
-            elif secs < 86400:
+            elif secs < 90000:
                 return str(secs // 3600) + "h" + str((secs % 3600) // 60).zfill(2) + "m"
             else:
                 days = secs // 86400

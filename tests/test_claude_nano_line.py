@@ -153,6 +153,16 @@ class TestFmtResetTime(unittest.TestCase):
         result = cnl.fmt_reset_time(iso_z)
         self.assertEqual(result, "30m")
 
+    def test_auto_exactly_24h(self):
+        iso = self._iso(86400)  # ちょうど24時間後 → 24h00m
+        result = cnl.fmt_reset_time(iso)
+        self.assertEqual(result, "24h00m")
+
+    def test_auto_24h30m(self):
+        iso = self._iso(88200)  # 24.5時間後 → 24h30m
+        result = cnl.fmt_reset_time(iso)
+        self.assertEqual(result, "24h30m")
+
 
 # ── 3. TestColorize ────────────────────────────────────────────────────────────
 class TestColorize(unittest.TestCase):
@@ -983,6 +993,16 @@ class TestFmtResetTimeV2(unittest.TestCase):
         iso = self._iso(2 * 86400 + 60)  # 2日+1分後 → 2d 形式
         result = cnl.fmt_reset_time_v2(iso, unit="auto", digits=1)
         self.assertEqual(result, "2d")
+
+    def test_unit_auto_exactly_24h(self):
+        iso = self._iso(86400 + 30)  # 24時間+余裕30秒後 → 24hXXm 形式
+        result = cnl.fmt_reset_time_v2(iso, unit="auto", digits=1)
+        self.assertRegex(result, r"^24h\d{2}m$")
+
+    def test_unit_auto_24h30m(self):
+        iso = self._iso(88200 + 30)  # 24h30m+余裕30秒後 → 24hXXm 形式
+        result = cnl.fmt_reset_time_v2(iso, unit="auto", digits=1)
+        self.assertRegex(result, r"^24h\d{2}m$")
 
     def test_empty_iso_returns_empty(self):
         self.assertEqual(cnl.fmt_reset_time_v2("", unit="h", digits=1), "")
