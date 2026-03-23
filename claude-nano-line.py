@@ -30,6 +30,7 @@ CACHE_TTL = 360
 HTTP_TIMEOUT = 5
 GLOBAL_TIMEOUT = 20
 STDIN_TIMEOUT = 3
+CMD_TIMEOUT = 2
 DEFAULT_WARN_PCT = 80
 DEFAULT_CRIT_PCT = 95
 API_URL = "https://api.anthropic.com/api/oauth/usage"
@@ -785,6 +786,86 @@ def render_custom(fmt, ctx_remaining, usage, model, cwd_real, git_branch, git_di
                 return color + text + RESET
             return text
 
+        elif inner.startswith("cmd:"):
+            body = inner[4:]  # 'cmd:' を除去
+
+            if body.startswith("`"):
+                # バッククォートで囲まれたコマンド: エスケープを考慮して閉じバッククォートを探す
+                i = 1
+                while i < len(body):
+                    if body[i] == "\\" and i + 1 < len(body):
+                        i += 2  # エスケープシーケンスをスキップ
+                    elif body[i] == "`":
+                        break
+                    else:
+                        i += 1
+                command = (
+                    body[1:i]
+                    .replace("\\\\", "\x00")  # \\ を一時プレースホルダーに
+                    .replace("\\`", "`")  # \` → `
+                    .replace("\x00", "\\")  # プレースホルダー → \
+                )  # \\ → \、\` → ` に復元
+                rest = body[i + 1 :]  # "|color:red" 等
+                opts = {}
+                if rest.startswith("|"):
+                    for seg in rest[1:].split("|"):
+                        opts.update(parse_options(seg))
+            else:
+                # バッククォートなし: text: と同じ末尾逆走査でオプション分離
+                parts = body.split("|")
+                opts = {}
+                cmd_end = len(parts)
+                for i in range(len(parts) - 1, 0, -1):
+                    parsed = parse_options(parts[i])
+                    if parsed:
+                        opts.update(parsed)
+                        cmd_end = i
+                    else:
+                        break
+                command = "|".join(parts[:cmd_end])
+
+            # コマンド実行
+            try:
+                timeout = int(opts.get("timeout", CMD_TIMEOUT))
+                proc = subprocess.Popen(
+                    command,
+                    shell=True,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE,
+                    text=True,
+                    start_new_session=True,
+                )
+                try:
+                    stdout, _ = proc.communicate(timeout=timeout)
+                    success = proc.returncode == 0
+                    val = stdout.strip() if success else ""
+                except subprocess.TimeoutExpired:
+                    try:
+                        if hasattr(os, "killpg"):
+                            os.killpg(proc.pid, signal.SIGTERM)
+                        else:
+                            proc.terminate()
+                    except ProcessLookupError:
+                        pass
+                    proc.communicate()
+                    success = False
+                    val = ""
+            except Exception:
+                success = False
+                val = ""
+
+            if not success:
+                mode, err_text = _resolve_on_error(opts)
+                if mode == "hide":
+                    return ""
+                if mode == "text":
+                    val = err_text
+
+            color = COLOR_MAP.get(opts.get("color", ""), "")
+            if color and val:
+                return color + val + RESET
+            return val
+
         parts = inner.split("|")
         identifier = parts[0]
         opts = {}
@@ -796,7 +877,7 @@ def render_custom(fmt, ctx_remaining, usage, model, cwd_real, git_branch, git_di
             return color + val + RESET
         return val
 
-    return re.sub(r"\{([^}]+)\}", lambda m: process_token(m.group(1)), fmt)
+    return re.sub(r"\{(cmd:`(?:[^`\\]|\\.)*`[^}]*|[^}]+)\}", lambda m: process_token(m.group(1)), fmt)
 
 
 # ── Main ────────────────────────────────────────────────────────────────────────
