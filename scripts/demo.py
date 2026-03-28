@@ -15,7 +15,7 @@ _mod = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(_mod)
 
 render_custom = _mod.render_custom
-render_legacy = _mod.render_legacy
+render_default = _mod.render_default
 THEMES = _mod.THEMES
 
 # ── Dummy data ──────────────────────────────────────────────────────────────────
@@ -59,10 +59,10 @@ for name, fmt in THEMES.items():
     out = render_custom(fmt, CTX_REMAINING, USAGE, MODEL, CWD_REAL, GIT_BRANCH, GIT_DIRTY)
     row(name, out)
 
-# ── Legacy (default) ────────────────────────────────────────────────────────────
-section("Legacy (default layout)")
+# ── Default ──────────────────────────────────────────────────────────────────────
+section("Default layout")
 cwd_base = Path(CWD_REAL).name
-out = render_legacy(CTX_REMAINING, USAGE, MODEL, cwd_base, GIT_BRANCH, GIT_DIRTY)
+out = render_default(CTX_REMAINING, USAGE, MODEL, cwd_base, GIT_BRANCH, GIT_DIRTY)
 row("(no FORMAT/THEME set)", out)
 
 # ── Examples from README ────────────────────────────────────────────────────────

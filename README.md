@@ -98,7 +98,7 @@ export CLAUDE_NANO_LINE_THEME=ocean
 
 | Theme     | Description                                          |
 | --------- | ---------------------------------------------------- |
-| `classic` | Reproduces the legacy default layout                 |
+| `classic` | Reproduces the default layout                        |
 | `minimal` | Minimal: ctx%, 5h%, model, path                      |
 | `ocean`   | Blue/cyan palette                                    |
 | `forest`  | Green palette                                        |
@@ -106,7 +106,7 @@ export CLAUDE_NANO_LINE_THEME=ocean
 | `nerd`    | Maximum density: token counts + reset times included |
 
 `CLAUDE_NANO_LINE_FORMAT` takes priority over `CLAUDE_NANO_LINE_THEME`. An
-unknown theme name silently falls back to the legacy layout.
+unknown theme name silently falls back to the default layout.
 
 ### Custom format
 
@@ -183,7 +183,7 @@ Use backticks when the command contains `|`, `:`, or `}`. Inside backticks, `` \
 | `alert-color`     | `*_pct`                  | color name                                                                        | `red`                 | Color when usage exceeds alert threshold                                                               |
 | `warn-threshold`  | `*_pct`                  | number                                                                            | `80`                  | Warning threshold (%)                                                                                  |
 | `alert-threshold` | `*_pct`                  | number                                                                            | `95`                  | Alert threshold (%)                                                                                    |
-| `format`          | `*_reset`                | `auto`/`hm`/`h1`/`dh`/`d1`                                                        | `auto`                | Time format (legacy option)                                                                            |
+| `format`          | `*_reset`                | `auto`/`hm`/`h1`/`dh`/`d1`                                                        | `auto`                | Time format (default option)                                                                           |
 | `unit`            | `*_reset`                | `auto` / `h` / `d` / `dh`                                                         | `auto`                | Display unit (`h`=hours, `d`=days, `dh`=days+hours, `auto`=auto)                                       |
 | `digits`          | `*_reset`                | number                                                                            | `1`                   | Decimal places (e.g. `digits:2` → `2.50h`)                                                             |
 | `format`          | `*_reset_at`             | `auto`/`auto_tz`/`time`/`time_tz`/`datetime`/`datetime_tz`/`full`/`full_tz`/`iso` | `auto`                | Datetime format (`auto`=time if today, `M/D HH:MM` if different day)                                   |
