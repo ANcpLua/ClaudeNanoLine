@@ -483,8 +483,8 @@ def estimate_tokens(model_name, ctx_remaining_pct):
     return used, total
 
 
-# ── Legacy rendering ────────────────────────────────────────────────────────────
-def render_legacy(ctx_remaining, usage, model, cwd_base, git_branch, git_dirty=False):
+# ── Default rendering ────────────────────────────────────────────────────────────
+def render_default(ctx_remaining, usage, model, cwd_base, git_branch, git_dirty=False):
     warn_pct = DEFAULT_WARN_PCT
     crit_pct = DEFAULT_CRIT_PCT
     api_error = usage.get("api_error", "")
@@ -930,7 +930,7 @@ def main():
         cwd_base = Path(cwd_real).name if cwd_real else ""
         if not cwd_base:
             cwd_base = cwd_short
-        output = render_legacy(ctx_remaining, usage, model, cwd_base, git_branch, git_dirty)
+        output = render_default(ctx_remaining, usage, model, cwd_base, git_branch, git_dirty)
 
     sys.stdout.write(output)
     sys.stdout.flush()
