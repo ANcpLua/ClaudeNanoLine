@@ -23,5 +23,6 @@ jobs:
       - uses: HappyOnigiri/ShareSettings/actions/prepare-release@main
         with:
           version: ${{ inputs.version }}
-          version-bump-type: none
+          version-bump-type: python
+          python-version-file: claude-nano-line.py
           github-token: ${{ secrets.GH_TOKEN }}
