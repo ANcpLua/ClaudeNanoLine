@@ -269,8 +269,8 @@ class TestGetThresholdColor(unittest.TestCase):
         self.assertEqual(cnl.get_threshold_color(97, opts), cnl.COLOR_MAP["pink"])
 
 
-# ── 8. TestRenderLegacy ────────────────────────────────────────────────────────
-class TestRenderLegacy(unittest.TestCase):
+# ── 8. TestRenderDefault ────────────────────────────────────────────────────────
+class TestRenderDefault(unittest.TestCase):
     def _usage(self, five=50, seven=60, api_error=""):
         if api_error:
             return {"api_error": api_error}
@@ -282,88 +282,88 @@ class TestRenderLegacy(unittest.TestCase):
         }
 
     def test_normal_5h_and_7d(self):
-        out = strip_ansi(cnl.render_legacy(None, self._usage(50, 60), "sonnet", "myproject", ""))
+        out = strip_ansi(cnl.render_default(None, self._usage(50, 60), "sonnet", "myproject", ""))
         self.assertIn("[5h]", out)
         self.assertIn("50%", out)
         self.assertIn("[7d]", out)
         self.assertIn("60%", out)
 
     def test_only_5h_data(self):
-        out = strip_ansi(cnl.render_legacy(None, self._usage(50, -1), "sonnet", "myproject", ""))
+        out = strip_ansi(cnl.render_default(None, self._usage(50, -1), "sonnet", "myproject", ""))
         self.assertIn("[5h]", out)
         self.assertIn("[7d] --%", out)
 
     def test_no_data(self):
-        out = strip_ansi(cnl.render_legacy(None, self._usage(-1, -1), "sonnet", "myproject", ""))
+        out = strip_ansi(cnl.render_default(None, self._usage(-1, -1), "sonnet", "myproject", ""))
         self.assertIn("[5h] --%", out)
         self.assertIn("[7d] --%", out)
 
     def test_api_error_limit(self):
-        out = strip_ansi(cnl.render_legacy(None, self._usage(api_error="limit"), "sonnet", "proj", ""))
+        out = strip_ansi(cnl.render_default(None, self._usage(api_error="limit"), "sonnet", "proj", ""))
         self.assertIn("Usage API Rate Limit", out)
 
     def test_api_error_timeout(self):
-        out = strip_ansi(cnl.render_legacy(None, self._usage(api_error="timeout"), "sonnet", "proj", ""))
+        out = strip_ansi(cnl.render_default(None, self._usage(api_error="timeout"), "sonnet", "proj", ""))
         self.assertIn("Timeout", out)
 
     def test_api_error_unknown(self):
-        out = strip_ansi(cnl.render_legacy(None, self._usage(api_error="unknown"), "sonnet", "proj", ""))
+        out = strip_ansi(cnl.render_default(None, self._usage(api_error="unknown"), "sonnet", "proj", ""))
         self.assertIn("Unknown Error", out)
 
     def test_with_ctx_remaining(self):
-        out = strip_ansi(cnl.render_legacy(70, self._usage(), "sonnet", "proj", ""))
+        out = strip_ansi(cnl.render_default(70, self._usage(), "sonnet", "proj", ""))
         self.assertIn("[ctx]", out)
         self.assertIn("30%", out)
 
     def test_without_ctx_remaining(self):
-        out = strip_ansi(cnl.render_legacy(None, self._usage(), "sonnet", "proj", ""))
+        out = strip_ansi(cnl.render_default(None, self._usage(), "sonnet", "proj", ""))
         self.assertNotIn("[ctx]", out)
 
     def test_with_git_branch(self):
-        out = strip_ansi(cnl.render_legacy(None, self._usage(), "sonnet", "proj", "main"))
+        out = strip_ansi(cnl.render_default(None, self._usage(), "sonnet", "proj", "main"))
         self.assertIn("(main)", out)
 
     def test_without_git_branch(self):
-        out = strip_ansi(cnl.render_legacy(None, self._usage(), "sonnet", "proj", ""))
+        out = strip_ansi(cnl.render_default(None, self._usage(), "sonnet", "proj", ""))
         # ブランチ名が空の場合 "(branch)" 形式のgit情報が表示されないことを確認
         self.assertNotIn("(main)", out)
         self.assertNotIn("(feat/", out)
 
     def test_color_green(self):
-        out = cnl.render_legacy(None, self._usage(50, 50), "sonnet", "proj", "")
+        out = cnl.render_default(None, self._usage(50, 50), "sonnet", "proj", "")
         self.assertIn(cnl.COLOR_MAP["green"], out)
 
     def test_color_yellow(self):
-        out = cnl.render_legacy(None, self._usage(85, 85), "sonnet", "proj", "")
+        out = cnl.render_default(None, self._usage(85, 85), "sonnet", "proj", "")
         self.assertIn(cnl.COLOR_MAP["yellow"], out)
 
     def test_color_red(self):
-        out = cnl.render_legacy(None, self._usage(97, 97), "sonnet", "proj", "")
+        out = cnl.render_default(None, self._usage(97, 97), "sonnet", "proj", "")
         self.assertIn(cnl.COLOR_MAP["red"], out)
 
     def test_model_haiku(self):
-        out = cnl.render_legacy(None, self._usage(), "claude-haiku-3", "proj", "")
+        out = cnl.render_default(None, self._usage(), "claude-haiku-3", "proj", "")
         self.assertIn(cnl.COLOR_MAP["amber"], out)
 
     def test_model_sonnet(self):
-        out = cnl.render_legacy(None, self._usage(), "claude-sonnet-4", "proj", "")
+        out = cnl.render_default(None, self._usage(), "claude-sonnet-4", "proj", "")
         self.assertIn(cnl.COLOR_MAP["sky_blue"], out)
 
     def test_model_opus(self):
-        out = cnl.render_legacy(None, self._usage(), "claude-opus-4", "proj", "")
+        out = cnl.render_default(None, self._usage(), "claude-opus-4", "proj", "")
         self.assertIn(cnl.COLOR_MAP["pink"], out)
 
     def test_api_error_suppresses_seven_part(self):
         # api_error 時は seven_part が空 → [7d] が出ない
-        out = strip_ansi(cnl.render_legacy(None, self._usage(api_error="timeout"), "sonnet", "proj", ""))
+        out = strip_ansi(cnl.render_default(None, self._usage(api_error="timeout"), "sonnet", "proj", ""))
         self.assertNotIn("[7d]", out)
 
     def test_dirty_shows_asterisk(self):
-        out = strip_ansi(cnl.render_legacy(None, self._usage(), "sonnet", "proj", "main", git_dirty=True))
+        out = strip_ansi(cnl.render_default(None, self._usage(), "sonnet", "proj", "main", git_dirty=True))
         self.assertIn("(main*)", out)
 
     def test_clean_no_asterisk(self):
-        out = strip_ansi(cnl.render_legacy(None, self._usage(), "sonnet", "proj", "main", git_dirty=False))
+        out = strip_ansi(cnl.render_default(None, self._usage(), "sonnet", "proj", "main", git_dirty=False))
         self.assertIn("(main)", out)
         self.assertNotIn("(main*)", out)
 
@@ -882,7 +882,7 @@ class TestMainIntegration(unittest.TestCase):
                                     cnl.main()
                                 return captured.getvalue()
 
-    def test_legacy_mode(self):
+    def test_default_mode(self):
         input_data = {
             "model": {"display_name": "claude-sonnet-4"},
             "workspace": {"current_dir": "/home/user/project"},
@@ -1038,11 +1038,11 @@ class TestResetDispatch(unittest.TestCase):
         val = self._render("{5h_reset|digits:0}", 9000)
         self.assertRegex(val, r"^\d+h$")
 
-    def test_no_opts_uses_legacy(self):
+    def test_no_opts_uses_default(self):
         val = self._render("{5h_reset}", 9000)
         self.assertGreater(len(val), 0)
 
-    def test_format_opt_uses_legacy(self):
+    def test_format_opt_uses_default(self):
         val = self._render("{5h_reset|format:h1}", 9000)
         self.assertRegex(val, r"^\d+\.\d+h$")
 
@@ -1329,8 +1329,8 @@ class TestRenderCustomTokens(unittest.TestCase):
         self.assertIn("200k", out)
 
 
-# ── Feature 5: render_legacy token info ────────────────────────────────────────
-class TestRenderLegacyTokens(unittest.TestCase):
+# ── Feature 5: render_default token info ────────────────────────────────────────
+class TestRenderDefaultTokens(unittest.TestCase):
     def _usage(self):
         return {
             "five_hour_pct": 50,
@@ -1340,13 +1340,13 @@ class TestRenderLegacyTokens(unittest.TestCase):
         }
 
     def test_ctx_shows_token_info(self):
-        out = strip_ansi(cnl.render_legacy(70, self._usage(), "claude-sonnet-4-6", "proj", ""))
+        out = strip_ansi(cnl.render_default(70, self._usage(), "claude-sonnet-4-6", "proj", ""))
         self.assertIn("[ctx]", out)
         self.assertIn("30%", out)
         self.assertNotIn("k/", out)
 
     def test_no_ctx_no_token_info(self):
-        out = strip_ansi(cnl.render_legacy(None, self._usage(), "claude-sonnet-4-6", "proj", ""))
+        out = strip_ansi(cnl.render_default(None, self._usage(), "claude-sonnet-4-6", "proj", ""))
         self.assertNotIn("[ctx]", out)
 
 
@@ -1394,7 +1394,7 @@ class TestThemePresets(unittest.TestCase):
                     fmt = cnl.THEMES.get(theme_name, "")
             self.assertEqual(fmt, custom_fmt)
 
-    def test_invalid_theme_falls_back_to_legacy(self):
+    def test_invalid_theme_falls_back_to_default(self):
         with patch.dict(os.environ, {"CLAUDE_NANO_LINE_THEME": "nonexistent_theme"}, clear=False):
             os.environ.pop("CLAUDE_NANO_LINE_FORMAT", None)
             fmt = os.environ.get("CLAUDE_NANO_LINE_FORMAT", "")
