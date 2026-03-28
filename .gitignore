@@ -31,3 +31,6 @@ tmp/
 /.claude
 /.agent
 /.cursor
+
+# AI Rules
+/CLAUDE.md
