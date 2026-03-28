@@ -95,14 +95,14 @@ export CLAUDE_NANO_LINE_THEME=ocean
 
 | テーマ    | 説明                                     |
 | --------- | ---------------------------------------- |
-| `classic` | レガシーデフォルトレイアウトを再現       |
+| `classic` | デフォルトレイアウトを再現               |
 | `minimal` | 最小限: ctx%, 5h%, model, path           |
 | `ocean`   | 青/シアン系カラー                        |
 | `forest`  | 緑系カラー                               |
 | `sunset`  | アンバー/ピンク系の暖色カラー            |
 | `nerd`    | 最大情報密度: トークン数・リセット時刻付 |
 
-`CLAUDE_NANO_LINE_FORMAT` は `CLAUDE_NANO_LINE_THEME` より優先されます。不明なテーマ名はサイレントにレガシーレイアウトへフォールバックします。
+`CLAUDE_NANO_LINE_FORMAT` は `CLAUDE_NANO_LINE_THEME` より優先されます。不明なテーマ名はサイレントにデフォルトレイアウトへフォールバックします。
 
 ### カスタムフォーマット
 
