@@ -1767,5 +1767,86 @@ class TestCmdToken(unittest.TestCase):
         self.assertNotIn(cnl.COLOR_MAP["cyan"], out)
 
 
+# ── 11. TestIsResetSince / TestGetUsageData ─────────────────────────────────────
+class TestIsResetSince(unittest.TestCase):
+    def test_reset_between_cache_and_now(self):
+        """キャッシュ取得後にリセット時刻を跨いだ → True"""
+        cached_ts = time.time() - 200
+        reset_epoch = time.time() - 100
+        iso = datetime.fromtimestamp(reset_epoch, tz=timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+        self.assertTrue(cnl._is_reset_since(iso, cached_ts))
+
+    def test_reset_in_future(self):
+        """リセット時刻が未来 → False"""
+        cached_ts = time.time() - 100
+        reset_epoch = time.time() + 100
+        iso = datetime.fromtimestamp(reset_epoch, tz=timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+        self.assertFalse(cnl._is_reset_since(iso, cached_ts))
+
+    def test_reset_before_cache(self):
+        """リセット時刻がキャッシュ取得前 → False（取得時点で正しい値）"""
+        reset_epoch = time.time() - 500
+        cached_ts = time.time() - 200
+        iso = datetime.fromtimestamp(reset_epoch, tz=timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+        self.assertFalse(cnl._is_reset_since(iso, cached_ts))
+
+    def test_empty_iso(self):
+        """iso_str が空 → False"""
+        self.assertFalse(cnl._is_reset_since("", time.time() - 100))
+
+    def test_invalid_iso(self):
+        """iso_str が不正 → False"""
+        self.assertFalse(cnl._is_reset_since("not-a-date", time.time() - 100))
+
+
+class TestGetUsageDataResetOverride(unittest.TestCase):
+    def _make_cache(self, five_resets_at, seven_resets_at, cached_ts=None):
+        ts = cached_ts if cached_ts is not None else time.time() - 200
+        return {
+            "_ts": ts,
+            "five_hour_pct": 80,
+            "seven_day_pct": 60,
+            "five_resets_at": five_resets_at,
+            "seven_resets_at": seven_resets_at,
+        }
+
+    def test_five_hour_reset_overrides_pct(self):
+        """5h リセット済み → five_hour_pct が 0 に上書き"""
+        reset_iso = datetime.fromtimestamp(time.time() - 100, tz=timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+        future_iso = datetime.fromtimestamp(time.time() + 3600, tz=timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+        cache = self._make_cache(reset_iso, future_iso)
+        with patch.object(cnl, "read_cache", return_value=cache):
+            data = cnl.get_usage_data()
+        self.assertEqual(data["five_hour_pct"], 0)
+        self.assertEqual(data["seven_day_pct"], 60)
+
+    def test_seven_day_reset_overrides_pct(self):
+        """7d リセット済み → seven_day_pct が 0 に上書き"""
+        future_iso = datetime.fromtimestamp(time.time() + 3600, tz=timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+        reset_iso = datetime.fromtimestamp(time.time() - 100, tz=timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+        cache = self._make_cache(future_iso, reset_iso)
+        with patch.object(cnl, "read_cache", return_value=cache):
+            data = cnl.get_usage_data()
+        self.assertEqual(data["five_hour_pct"], 80)
+        self.assertEqual(data["seven_day_pct"], 0)
+
+    def test_no_reset_keeps_pct(self):
+        """リセット未発生 → pct はそのまま"""
+        future_iso = datetime.fromtimestamp(time.time() + 3600, tz=timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+        cache = self._make_cache(future_iso, future_iso)
+        with patch.object(cnl, "read_cache", return_value=cache):
+            data = cnl.get_usage_data()
+        self.assertEqual(data["five_hour_pct"], 80)
+        self.assertEqual(data["seven_day_pct"], 60)
+
+    def test_error_cache_unaffected(self):
+        """エラーキャッシュ（resets_at なし）→ 影響なし"""
+        cache = {"_ts": time.time() - 200, "api_error": "timeout"}
+        with patch.object(cnl, "read_cache", return_value=cache):
+            data = cnl.get_usage_data()
+        self.assertEqual(data.get("api_error"), "timeout")
+        self.assertNotIn("five_hour_pct", data)
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)
