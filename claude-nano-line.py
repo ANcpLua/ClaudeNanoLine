@@ -201,7 +201,7 @@ def read_cache():
 def write_cache(data):
     """アトミックにキャッシュ書き込み (tempfile + rename)"""
     CACHE_DIR.mkdir(parents=True, exist_ok=True)
-    data["_ts"] = int(time.time())
+    data["_ts"] = time.time()
     fd, tmp = tempfile.mkstemp(dir=CACHE_DIR, prefix=".claude-usage-", suffix=".tmp")
     try:
         with os.fdopen(fd, "w") as f:
