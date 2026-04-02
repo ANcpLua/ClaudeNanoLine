@@ -201,7 +201,7 @@ def read_cache():
 def write_cache(data):
     """アトミックにキャッシュ書き込み (tempfile + rename)"""
     CACHE_DIR.mkdir(parents=True, exist_ok=True)
-    data["_ts"] = int(time.time())
+    data["_ts"] = time.time()
     fd, tmp = tempfile.mkstemp(dir=CACHE_DIR, prefix=".claude-usage-", suffix=".tmp")
     try:
         with os.fdopen(fd, "w") as f:
@@ -306,10 +306,27 @@ def fetch_usage(token):
     return result
 
 
+def _is_reset_since(iso_str, cached_ts):
+    """キャッシュ取得時刻から現在までの間にリセット時刻を跨いだか判定"""
+    if not iso_str:
+        return False
+    try:
+        dt = datetime.fromisoformat(iso_str.replace("Z", "+00:00"))
+        reset_epoch = dt.timestamp()
+        return cached_ts <= reset_epoch <= time.time()
+    except Exception:
+        return False
+
+
 def get_usage_data():
     """キャッシュ確認 -> API 呼び出し -> データを返す"""
     cached = read_cache()
     if cached is not None:
+        ts = cached.get("_ts", 0)
+        if _is_reset_since(cached.get("five_resets_at"), ts):
+            cached["five_hour_pct"] = 0
+        if _is_reset_since(cached.get("seven_resets_at"), ts):
+            cached["seven_day_pct"] = 0
         return cached
 
     token = get_oauth_token()
