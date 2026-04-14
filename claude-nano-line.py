@@ -12,6 +12,7 @@ from __future__ import annotations
 
 __version__ = "1.2.1"
 
+import hashlib
 import json
 import os
 import queue
@@ -260,6 +261,11 @@ _SSL_CONTEXT = _build_ssl_context()
 
 
 # ── API ─────────────────────────────────────────────────────────────────────────
+def _token_hash(token):
+    """トークンの先頭8文字のSHA256（ログに生トークンを残さないための短縮ハッシュ）"""
+    return hashlib.sha256(token.encode()).hexdigest()[:8]
+
+
 def to_pct(val):
     if val is None:
         return -1
@@ -287,7 +293,7 @@ def fetch_usage(token):
     except HTTPError as e:
         if e.code == 401:
             write_log("error:auth http_status=401")
-            write_cache({"api_error": "unknown"})
+            write_cache({"api_error": "unknown", "_token_hash": _token_hash(token)})
             return {"api_error": "unknown"}
         if e.code == 429:
             write_log("error:limit http_status=429")
@@ -305,6 +311,10 @@ def fetch_usage(token):
         if isinstance(reason, ssl.SSLError):
             write_log("error:ssl reason=" + str(reason))
             write_cache({"api_error": "unknown"})
+            return {"api_error": "unknown"}
+        if "unauthorized" in str(reason).lower():
+            write_log("error:auth url_error=" + str(reason))
+            write_cache({"api_error": "unknown", "_token_hash": _token_hash(token)})
             return {"api_error": "unknown"}
         write_log("error:unknown url_error=" + str(reason))
         write_cache({"api_error": "unknown"})
@@ -365,6 +375,12 @@ def get_usage_data():
     """キャッシュ確認 -> API 呼び出し -> データを返す"""
     cached = read_cache()
     if cached is not None:
+        # auth error キャッシュ中でも、Keychainのトークンが変わっていたら即時再試行
+        if cached.get("api_error") == "unknown" and cached.get("_token_hash"):
+            token = get_oauth_token()
+            if token and _token_hash(token) != cached["_token_hash"]:
+                write_log("info:token changed; bypassing auth error cache")
+                return fetch_usage(token)
         ts = cached.get("_ts", 0)
         if _is_reset_since(cached.get("five_resets_at"), ts):
             cached["five_hour_pct"] = 0
