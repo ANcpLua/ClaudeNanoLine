@@ -284,6 +284,18 @@ def fetch_usage(token):
         write_log("error:timeout")
         write_cache({"api_error": "timeout"})
         return {"api_error": "timeout"}
+    except HTTPError as e:
+        if e.code == 401:
+            write_log("error:auth http_status=401")
+            write_cache({"api_error": "unknown"})
+            return {"api_error": "unknown"}
+        if e.code == 429:
+            write_log("error:limit http_status=429")
+            write_cache({"api_error": "limit"})
+            return {"api_error": "limit"}
+        write_log("error:unknown http_status=" + str(e.code))
+        write_cache({"api_error": "unknown"})
+        return {"api_error": "unknown"}
     except URLError as e:
         reason = getattr(e, "reason", str(e))
         if "timed out" in str(reason).lower():
@@ -295,14 +307,6 @@ def fetch_usage(token):
             write_cache({"api_error": "unknown"})
             return {"api_error": "unknown"}
         write_log("error:unknown url_error=" + str(reason))
-        write_cache({"api_error": "unknown"})
-        return {"api_error": "unknown"}
-    except HTTPError as e:
-        if e.code == 429:
-            write_log("error:limit http_status=429")
-            write_cache({"api_error": "limit"})
-            return {"api_error": "limit"}
-        write_log("error:unknown http_status=" + str(e.code))
         write_cache({"api_error": "unknown"})
         return {"api_error": "unknown"}
     except Exception as e:
