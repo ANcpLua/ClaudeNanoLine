@@ -286,7 +286,9 @@ tail -n 20 "${XDG_STATE_HOME:-$HOME/.local/state}/claude-nano-line/claude-usage-
   `~/.claude/.credentials.json` にトークンが保存されます。
 - **ネットワーク**: API への接続に失敗している可能性があります。ファイアウォールやプロキシ設定を確認してください。
 - **401 からの復旧挙動**: 認証エラー時はエラーをキャッシュしつつ、同一トークンでも 1 回だけ強制再試行します。
-  それでも失敗する場合は Claude Code で再ログインし、キーチェーン上のトークンが更新されたか確認してください。
+  それでも失敗する場合は Claude Code で再ログインし、OS に応じた保存先を確認してください（macOS は
+  Keychain、Windows/Linux は `~/.claude/.credentials.json`）。トークンが古いままなら、
+  Claude Code で再ログインして更新してください。
 
 ### `Timeout` と表示される
 

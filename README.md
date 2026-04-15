@@ -293,7 +293,9 @@ Add the `export` line to `~/.zprofile` or `~/.bashrc` to apply it permanently.
   settings.
 - **401 recovery behavior**: After an auth error, the script caches the error
   but still performs one forced retry with the current token. If it still fails,
-  re-authenticate in Claude Code and verify that the Keychain token changed.
+  re-authenticate in Claude Code, then verify the token source for your OS:
+  Keychain on macOS, or `~/.claude/.credentials.json` on Windows/Linux. If the
+  token entry/file is stale, sign in again with Claude Code to refresh it.
 
 ### Shows `Timeout`
 
