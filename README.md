@@ -276,6 +276,9 @@ export CLAUDE_NANO_LINE_FORMAT="{cmd:\`uptime | awk '{print \$NF}'\`|color:yello
 
 # Fallback text when command fails
 export CLAUDE_NANO_LINE_FORMAT="{cmd:false|on-error:text(N/A)} {model}"
+
+# Check auth-retry behavior in logs (401 handling)
+tail -n 20 "${XDG_STATE_HOME:-$HOME/.local/state}/claude-nano-line/claude-usage-api.log" | rg "error:auth|info:forcing one auth retry|info:token changed"
 ```
 
 Add the `export` line to `~/.zprofile` or `~/.bashrc` to apply it permanently.
@@ -288,6 +291,11 @@ Add the `export` line to `~/.zprofile` or `~/.bashrc` to apply it permanently.
   the macOS Keychain or `~/.claude/.credentials.json` on Windows/Linux.
 - **Network**: The API may be unreachable. Check your firewall or proxy
   settings.
+- **401 recovery behavior**: After an auth error, the script caches the error
+  but still performs one forced retry with the current token. If it still fails,
+  re-authenticate in Claude Code, then verify the token source for your OS:
+  Keychain on macOS, or `~/.claude/.credentials.json` on Windows/Linux. If the
+  token entry/file is stale, sign in again with Claude Code to refresh it.
 
 ### Shows `Timeout`
 

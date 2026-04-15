@@ -271,6 +271,9 @@ export CLAUDE_NANO_LINE_FORMAT="{cmd:\`uptime | awk '{print \$NF}'\`|color:yello
 
 # コマンド失敗時にフォールバックテキストを表示
 export CLAUDE_NANO_LINE_FORMAT="{cmd:false|on-error:text(N/A)} {model}"
+
+# 認証リトライ挙動をログで確認（401対策）
+tail -n 20 "${XDG_STATE_HOME:-$HOME/.local/state}/claude-nano-line/claude-usage-api.log" | rg "error:auth|info:forcing one auth retry|info:token changed"
 ```
 
 `~/.zprofile` や `~/.bashrc` に `export` 行を追加すれば常時有効になります。
@@ -282,6 +285,10 @@ export CLAUDE_NANO_LINE_FORMAT="{cmd:false|on-error:text(N/A)} {model}"
 - **トークン未取得**: Claude Code で一度ログインしてください。macOS はキーチェーン、Windows/Linux は
   `~/.claude/.credentials.json` にトークンが保存されます。
 - **ネットワーク**: API への接続に失敗している可能性があります。ファイアウォールやプロキシ設定を確認してください。
+- **401 からの復旧挙動**: 認証エラー時はエラーをキャッシュしつつ、同一トークンでも 1 回だけ強制再試行します。
+  それでも失敗する場合は Claude Code で再ログインし、OS に応じた保存先を確認してください（macOS は
+  Keychain、Windows/Linux は `~/.claude/.credentials.json`）。トークンが古いままなら、
+  Claude Code で再ログインして更新してください。
 
 ### `Timeout` と表示される
 
