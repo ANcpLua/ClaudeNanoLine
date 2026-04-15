@@ -272,7 +272,7 @@ def to_pct(val):
     return min(100, int(float(val)))
 
 
-def fetch_usage(token):
+def fetch_usage(token, force_auth_retry=False):
     """Anthropic Usage API を呼び出し、パース済みキャッシュデータを返す"""
     req = Request(
         API_URL,
@@ -293,7 +293,13 @@ def fetch_usage(token):
     except HTTPError as e:
         if e.code == 401:
             write_log("error:auth http_status=401")
-            write_cache({"api_error": "unknown", "_token_hash": _token_hash(token)})
+            write_cache(
+                {
+                    "api_error": "unknown",
+                    "_token_hash": _token_hash(token),
+                    "_auth_retry_done": force_auth_retry,
+                }
+            )
             return {"api_error": "unknown"}
         if e.code == 429:
             write_log("error:limit http_status=429")
@@ -314,7 +320,13 @@ def fetch_usage(token):
             return {"api_error": "unknown"}
         if "unauthorized" in str(reason).lower():
             write_log("error:auth url_error=" + str(reason))
-            write_cache({"api_error": "unknown", "_token_hash": _token_hash(token)})
+            write_cache(
+                {
+                    "api_error": "unknown",
+                    "_token_hash": _token_hash(token),
+                    "_auth_retry_done": force_auth_retry,
+                }
+            )
             return {"api_error": "unknown"}
         write_log("error:unknown url_error=" + str(reason))
         write_cache({"api_error": "unknown"})
@@ -381,6 +393,10 @@ def get_usage_data():
             if token and _token_hash(token) != cached["_token_hash"]:
                 write_log("info:token changed; bypassing auth error cache")
                 return fetch_usage(token)
+            # トークンが同じでも、認証エラー時は1回だけ強制再試行する
+            if token and not cached.get("_auth_retry_done", False):
+                write_log("info:forcing one auth retry with current token")
+                return fetch_usage(token, force_auth_retry=True)
         ts = cached.get("_ts", 0)
         if _is_reset_since(cached.get("five_resets_at"), ts):
             cached["five_hour_pct"] = 0
