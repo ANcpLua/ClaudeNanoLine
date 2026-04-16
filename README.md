@@ -297,6 +297,12 @@ Add the `export` line to `~/.zprofile` or `~/.bashrc` to apply it permanently.
   Keychain on macOS, or `~/.claude/.credentials.json` on Windows/Linux. If the
   token entry/file is stale, sign in again with Claude Code to refresh it.
 
+### Shows `Token Expired (/login)`
+
+The OAuth access token has expired (tokens have an 8-hour lifetime). Run
+`/login` in Claude Code to obtain a new token. The script checks the
+`expiresAt` field before calling the API, avoiding unnecessary 401 requests.
+
 ### Shows `Timeout`
 
 The API request timed out. Check your network connection and wait a few minutes

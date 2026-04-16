@@ -900,7 +900,7 @@ class TestGetUsageData(unittest.TestCase):
         with patch.object(cnl, "read_cache", return_value=None):
             with patch.object(cnl, "get_oauth_token", return_value=None):
                 result = cnl.get_usage_data()
-        self.assertEqual(result, {})
+        self.assertEqual(result, {"api_error": "auth"})
 
 
 # ── 16. TestMainIntegration ────────────────────────────────────────────────────
