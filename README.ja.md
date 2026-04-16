@@ -290,6 +290,12 @@ tail -n 20 "${XDG_STATE_HOME:-$HOME/.local/state}/claude-nano-line/claude-usage-
   Keychain、Windows/Linux は `~/.claude/.credentials.json`）。トークンが古いままなら、
   Claude Code で再ログインして更新してください。
 
+### `Token Expired (/login)` と表示される
+
+OAuth アクセストークンが期限切れです（トークンの有効期間は 8 時間）。Claude Code で
+`/login` を実行して新しいトークンを取得してください。スクリプトは API を呼び出す前に
+`expiresAt` フィールドを確認し、不要な 401 リクエストを回避します。
+
 ### `Timeout` と表示される
 
 API リクエストがタイムアウトしました。ネットワーク状況を確認し、数分後に再試行してください（360 秒キャッシュ後に完了後に自動で再取得されます）。

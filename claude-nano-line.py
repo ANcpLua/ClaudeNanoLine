@@ -167,6 +167,27 @@ def get_git_dirty(cwd):
 
 
 # ── OAuth token ─────────────────────────────────────────────────────────────────
+def _extract_token(oauth_data):
+    """claudeAiOauth dict からトークンを取り出し、期限切れなら warn ログを出す。
+
+    Returns:
+        accessToken (str) or None
+    """
+    token = oauth_data.get("accessToken")
+    if not token:
+        return None
+    expires_at = oauth_data.get("expiresAt")
+    if expires_at is not None:
+        try:
+            expires_epoch = int(expires_at) / 1000  # ms -> sec
+            if time.time() >= expires_epoch:
+                write_log("warn:token expired (run /login in Claude Code)")
+                return None
+        except (ValueError, TypeError):
+            pass
+    return token
+
+
 def get_oauth_token():
     """macOS Keychain -> credentials file の順でトークンを取得"""
     # macOS Keychain
@@ -179,7 +200,7 @@ def get_oauth_token():
         )
         if result.returncode == 0:
             creds = json.loads(result.stdout.strip())
-            return creds["claudeAiOauth"]["accessToken"]
+            return _extract_token(creds.get("claudeAiOauth", {}))
     except Exception:
         pass
 
@@ -187,7 +208,7 @@ def get_oauth_token():
     cred_path = Path.home() / ".claude" / ".credentials.json"
     try:
         with open(cred_path) as f:
-            return json.load(f)["claudeAiOauth"]["accessToken"]
+            return _extract_token(json.load(f).get("claudeAiOauth", {}))
     except Exception:
         return None
 
@@ -295,12 +316,12 @@ def fetch_usage(token, force_auth_retry=False):
             write_log("error:auth http_status=401")
             write_cache(
                 {
-                    "api_error": "unknown",
+                    "api_error": "auth",
                     "_token_hash": _token_hash(token),
                     "_auth_retry_done": force_auth_retry,
                 }
             )
-            return {"api_error": "unknown"}
+            return {"api_error": "auth"}
         if e.code == 429:
             write_log("error:limit http_status=429")
             write_cache({"api_error": "limit"})
@@ -322,12 +343,12 @@ def fetch_usage(token, force_auth_retry=False):
             write_log("error:auth url_error=" + str(reason))
             write_cache(
                 {
-                    "api_error": "unknown",
+                    "api_error": "auth",
                     "_token_hash": _token_hash(token),
                     "_auth_retry_done": force_auth_retry,
                 }
             )
-            return {"api_error": "unknown"}
+            return {"api_error": "auth"}
         write_log("error:unknown url_error=" + str(reason))
         write_cache({"api_error": "unknown"})
         return {"api_error": "unknown"}
@@ -387,8 +408,9 @@ def get_usage_data():
     """キャッシュ確認 -> API 呼び出し -> データを返す"""
     cached = read_cache()
     if cached is not None:
+        cached_err = cached.get("api_error", "")
         # auth error キャッシュ中でも、Keychainのトークンが変わっていたら即時再試行
-        if cached.get("api_error") == "unknown" and cached.get("_token_hash"):
+        if cached_err in ("unknown", "auth") and cached.get("_token_hash"):
             token = get_oauth_token()
             if token and _token_hash(token) != cached["_token_hash"]:
                 write_log("info:token changed; bypassing auth error cache")
@@ -396,6 +418,7 @@ def get_usage_data():
             # トークンが同じでも、認証エラー時は1回だけ強制再試行する
             if token and not cached.get("_auth_retry_done", False):
                 write_log("info:forcing one auth retry with current token")
+                write_cache({**cached, "_auth_retry_done": True})
                 return fetch_usage(token, force_auth_retry=True)
         ts = cached.get("_ts", 0)
         if _is_reset_since(cached.get("five_resets_at"), ts):
@@ -406,7 +429,9 @@ def get_usage_data():
 
     token = get_oauth_token()
     if not token:
-        return {}
+        write_log("warn:no token (expired or missing — run /login in Claude Code)")
+        write_cache({"api_error": "auth"})
+        return {"api_error": "auth"}
 
     return fetch_usage(token)
 
@@ -596,6 +621,7 @@ def render_default(ctx_remaining, usage, model, cwd_base, git_branch, git_dirty=
 
     if api_error:
         err_map = {
+            "auth": "Token Expired (/login)",
             "limit": "Usage API Rate Limit",
             "timeout": "Timeout",
             "unknown": "Unknown Error",
@@ -706,7 +732,7 @@ def render_custom(fmt, ctx_remaining, usage, model, cwd_real, git_branch, git_di
                     return "", ""
                 if mode == "text":
                     return custom_text, COLOR_MAP.get(opts.get("color", "light_gray"), "")
-                err_map = {"limit": "Rate Limit", "timeout": "Timeout", "unknown": "Unknown"}
+                err_map = {"auth": "/login", "limit": "Rate Limit", "timeout": "Timeout", "unknown": "Unknown"}
                 return err_map.get(api_error, "Unknown"), COLOR_MAP.get(opts.get("color", "light_gray"), "")
 
             if prefix == "ctx":
@@ -747,7 +773,7 @@ def render_custom(fmt, ctx_remaining, usage, model, cwd_real, git_branch, git_di
                     return "", ""
                 if mode == "text":
                     return custom_text, COLOR_MAP.get(opts.get("color", ""), "")
-                err_map = {"limit": "Rate Limit", "timeout": "Timeout", "unknown": "Unknown"}
+                err_map = {"auth": "/login", "limit": "Rate Limit", "timeout": "Timeout", "unknown": "Unknown"}
                 return err_map.get(api_error, "Unknown"), COLOR_MAP.get(opts.get("color", ""), "")
             if name == "5h_reset":
                 iso = usage.get("five_resets_at", "")
@@ -775,7 +801,7 @@ def render_custom(fmt, ctx_remaining, usage, model, cwd_real, git_branch, git_di
                     return "", ""
                 if mode == "text":
                     return custom_text, COLOR_MAP.get(opts.get("color", ""), "")
-                err_map = {"limit": "Rate Limit", "timeout": "Timeout", "unknown": "Unknown"}
+                err_map = {"auth": "/login", "limit": "Rate Limit", "timeout": "Timeout", "unknown": "Unknown"}
                 return err_map.get(api_error, "Unknown"), COLOR_MAP.get(opts.get("color", ""), "")
             if name == "5h_reset_at":
                 iso = usage.get("five_resets_at", "")
