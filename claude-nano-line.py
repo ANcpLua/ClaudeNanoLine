@@ -410,13 +410,18 @@ def get_usage_data():
     if cached is not None:
         cached_err = cached.get("api_error", "")
         # auth error キャッシュ中でも、Keychainのトークンが変わっていたら即時再試行
-        if cached_err in ("unknown", "auth") and cached.get("_token_hash"):
+        if cached_err in ("unknown", "auth"):
             token = get_oauth_token()
-            if token and _token_hash(token) != cached["_token_hash"]:
+            cached_hash = cached.get("_token_hash")
+            if token and cached_hash and _token_hash(token) != cached_hash:
                 write_log("info:token changed; bypassing auth error cache")
                 return fetch_usage(token)
+            # トークンが取得できるのにhashがない場合 = no-token状態から復帰した
+            if token and not cached_hash:
+                write_log("info:token now available; bypassing no-token auth error cache")
+                return fetch_usage(token)
             # トークンが同じでも、認証エラー時は1回だけ強制再試行する
-            if token and not cached.get("_auth_retry_done", False):
+            if token and cached_hash and not cached.get("_auth_retry_done", False):
                 write_log("info:forcing one auth retry with current token")
                 write_cache({**cached, "_auth_retry_done": True})
                 return fetch_usage(token, force_auth_retry=True)
