@@ -30,14 +30,10 @@ export CLAUDE_NANO_LINE_FORMAT="{5h_pct} {7d_pct} {model} {cwd} ({branch})"
 # 1. インストール
 curl -fsSL https://raw.githubusercontent.com/HappyOnigiri/ClaudeNanoLine/main/setup.sh | bash
 
-# 2. ClaudeNanoLine 用のトークンを発行（推奨）
-claude setup-token
-export CLAUDE_NANO_LINE_TOKEN="発行したトークン"
-
-# 3. 好みのフォーマットを設定（省略するとデフォルト表示）
+# 2. 好みのフォーマットを設定（省略するとデフォルト表示）
 export CLAUDE_NANO_LINE_FORMAT="{5h_pct} {model} {cwd} ({branch})"
 
-# 4. Claude Code を起動するとステータスラインに反映
+# 3. Claude Code を起動するとステータスラインに反映
 claude
 ```
 
@@ -51,22 +47,6 @@ curl -fsSL https://raw.githubusercontent.com/HappyOnigiri/ClaudeNanoLine/main/se
 
 `~/.claude/claude-nano-line.py` のダウンロードと `~/.claude/settings.json`
 への設定追加を自動で行います。変更前に差分を表示して確認を求めます。
-
-### 推奨トークン設定
-
-`CLAUDE_NANO_LINE_TOKEN` は、macOS Keychain や
-`~/.claude/.credentials.json` より先に参照されます。
-
-Claude Code のログインにひもづくトークンは期限切れで使えなくなり、再ログインが必要になることがあります。安定して使いたい場合は、
-`claude setup-token` で専用トークンを発行し、明示的に設定する方法を推奨します。
-
-```sh
-claude setup-token
-export CLAUDE_NANO_LINE_TOKEN="発行したトークン"
-```
-
-恒久的に使う場合は、`export` 行を `~/.zprofile`、`~/.bashrc`、
-`~/.config/fish/config.fish` などのシェル設定に追加してください。
 
 ### 手動インストール
 
@@ -98,8 +78,8 @@ chmod +x ~/.claude/claude-nano-line.py
 Git Bash または WSL 上で動作します。自動インストール・手動インストールともに、お使いの環境（Git Bash または
 WSL）のシェルから実行してください。
 
-- **認証**: Windows でも推奨は `CLAUDE_NANO_LINE_TOKEN` の利用です。未設定の場合は、
-  macOS のキーチェーンが使えないため `~/.claude/.credentials.json` からトークンを取得します。
+- **認証**: Windows では macOS のキーチェーンが使えないため、`~/.claude/.credentials.json`
+  からトークンを取得します。Claude Code でログイン済みであれば、このファイルは自動で作成されます。
 
 ## カスタマイズ
 
@@ -303,23 +283,18 @@ tail -n 20 "${XDG_STATE_HOME:-$HOME/.local/state}/claude-nano-line/claude-usage-
 ### API 使用率が `[5h] --%` / `[7d] --%` と表示される
 
 - **トークン未取得**: Claude Code で一度ログインしてください。macOS はキーチェーン、Windows/Linux は
-  `~/.claude/.credentials.json` にトークンが保存されます。より安定して使うには、
-  `claude setup-token` でトークンを発行し、`CLAUDE_NANO_LINE_TOKEN` に設定してください。
+  `~/.claude/.credentials.json` にトークンが保存されます。
 - **ネットワーク**: API への接続に失敗している可能性があります。ファイアウォールやプロキシ設定を確認してください。
 - **401 からの復旧挙動**: 認証エラー時はエラーをキャッシュしつつ、同一トークンでも 1 回だけ強制再試行します。
-  それでも失敗する場合は、まず `CLAUDE_NANO_LINE_TOKEN` を設定しているか確認してください。未設定なら
-  Claude Code で再ログインし、OS に応じた保存先を確認してください（macOS は Keychain、Windows/Linux は
-  `~/.claude/.credentials.json`）。ログイン由来のトークンが古いままなら、Claude Code で再ログインして更新してください。
+  それでも失敗する場合は Claude Code で再ログインし、OS に応じた保存先を確認してください（macOS は
+  Keychain、Windows/Linux は `~/.claude/.credentials.json`）。トークンが古いままなら、
+  Claude Code で再ログインして更新してください。
 
 ### `Token Expired (/login)` と表示される
 
-Claude Code ログイン由来の OAuth アクセストークンが期限切れです（トークンの有効期間は 8 時間）。
-Keychain や `~/.claude/.credentials.json` に保存されたトークンを使っている場合は、Claude Code で
-`/login` を実行して新しいトークンを取得してください。スクリプトは API を呼び出す前に `expiresAt`
-フィールドを確認し、不要な 401 リクエストを回避します。
-
-期限切れしやすいログイントークンへの依存を避けたい場合は、`claude setup-token` で発行したトークンを
-`CLAUDE_NANO_LINE_TOKEN` に設定する方法を推奨します。
+OAuth アクセストークンが期限切れです（トークンの有効期間は 8 時間）。Claude Code で
+`/login` を実行して新しいトークンを取得してください。スクリプトは API を呼び出す前に
+`expiresAt` フィールドを確認し、不要な 401 リクエストを回避します。
 
 ### `Timeout` と表示される
 
