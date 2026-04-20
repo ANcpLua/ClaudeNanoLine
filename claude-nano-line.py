@@ -189,7 +189,12 @@ def _extract_token(oauth_data):
 
 
 def get_oauth_token():
-    """macOS Keychain -> credentials file の順でトークンを取得"""
+    """環境変数 -> macOS Keychain -> credentials file の順でトークンを取得"""
+    # 環境変数による明示的な上書き
+    env_token = os.environ.get("CLAUDE_NANO_LINE_TOKEN", "").strip()
+    if env_token:
+        return env_token
+
     # macOS Keychain
     try:
         result = subprocess.run(

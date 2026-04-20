@@ -30,10 +30,14 @@ export CLAUDE_NANO_LINE_FORMAT="{5h_pct} {7d_pct} {model} {cwd} ({branch})"
 # 1. Install
 curl -fsSL https://raw.githubusercontent.com/HappyOnigiri/ClaudeNanoLine/main/setup.sh | bash
 
-# 2. Set your preferred format (optional — defaults are sensible)
+# 2. Issue a dedicated token for ClaudeNanoLine (recommended)
+claude setup-token
+export CLAUDE_NANO_LINE_TOKEN="your-issued-token"
+
+# 3. Set your preferred format (optional — defaults are sensible)
 export CLAUDE_NANO_LINE_FORMAT="{5h_pct} {model} {cwd} ({branch})"
 
-# 3. Launch Claude Code — the status line appears immediately
+# 4. Launch Claude Code — the status line appears immediately
 claude
 ```
 
@@ -48,6 +52,23 @@ curl -fsSL https://raw.githubusercontent.com/HappyOnigiri/ClaudeNanoLine/main/se
 Downloads `~/.claude/claude-nano-line.py` and adds the configuration to
 `~/.claude/settings.json`. Shows a diff and asks for confirmation before making
 changes.
+
+### Recommended token setup
+
+`CLAUDE_NANO_LINE_TOKEN` is checked before macOS Keychain and
+`~/.claude/.credentials.json`.
+
+Tokens tied to Claude Code login can expire and make the Keychain / credentials
+entry unusable until you log in again. For a more stable setup, issue a token
+with `claude setup-token` and set it explicitly:
+
+```sh
+claude setup-token
+export CLAUDE_NANO_LINE_TOKEN="your-issued-token"
+```
+
+Add the `export` line to your shell profile such as `~/.zprofile`,
+`~/.bashrc`, or `~/.config/fish/config.fish` if you want it to persist.
 
 ### Manual install
 
@@ -79,9 +100,9 @@ chmod +x ~/.claude/claude-nano-line.py
 Works on Git Bash or WSL. Run the installer (automatic or manual) from your Git
 Bash or WSL shell.
 
-- **Authentication**: Since macOS Keychain is unavailable on Windows, the token
-  is read from `~/.claude/.credentials.json`. This file is created automatically
-  when you log in with Claude Code.
+- **Authentication**: The recommended setup on Windows is also
+  `CLAUDE_NANO_LINE_TOKEN`. If it is not set, the script falls back to
+  `~/.claude/.credentials.json` because macOS Keychain is unavailable.
 
 ## Customization
 
@@ -288,20 +309,28 @@ Add the `export` line to `~/.zprofile` or `~/.bashrc` to apply it permanently.
 ### API usage shows `[5h] --%` / `[7d] --%`
 
 - **No token**: Log in with Claude Code at least once. The token is stored in
-  the macOS Keychain or `~/.claude/.credentials.json` on Windows/Linux.
+  the macOS Keychain or `~/.claude/.credentials.json` on Windows/Linux. For a
+  more reliable setup, issue a token with `claude setup-token` and export it as
+  `CLAUDE_NANO_LINE_TOKEN`.
 - **Network**: The API may be unreachable. Check your firewall or proxy
   settings.
 - **401 recovery behavior**: After an auth error, the script caches the error
   but still performs one forced retry with the current token. If it still fails,
+  first verify `CLAUDE_NANO_LINE_TOKEN` if you set one. Otherwise,
   re-authenticate in Claude Code, then verify the token source for your OS:
   Keychain on macOS, or `~/.claude/.credentials.json` on Windows/Linux. If the
-  token entry/file is stale, sign in again with Claude Code to refresh it.
+  login-backed token entry/file is stale, sign in again with Claude Code to
+  refresh it.
 
 ### Shows `Token Expired (/login)`
 
-The OAuth access token has expired (tokens have an 8-hour lifetime). Run
-`/login` in Claude Code to obtain a new token. The script checks the
-`expiresAt` field before calling the API, avoiding unnecessary 401 requests.
+The Claude Code login token has expired (tokens have an 8-hour lifetime). If
+you rely on Keychain or `~/.claude/.credentials.json`, run `/login` in Claude
+Code to obtain a new token. The script checks the `expiresAt` field before
+calling the API, avoiding unnecessary 401 requests.
+
+To avoid depending on expiring login-backed credentials, prefer issuing a token
+with `claude setup-token` and setting `CLAUDE_NANO_LINE_TOKEN`.
 
 ### Shows `Timeout`
 
