@@ -416,8 +416,8 @@ def get_usage_data():
             if token and cached_hash and _token_hash(token) != cached_hash:
                 write_log("info:token changed; bypassing auth error cache")
                 return fetch_usage(token)
-            # トークンが取得できるのにhashがない場合 = no-token状態から復帰した
-            if token and not cached_hash:
+            # トークンが取得できるのにhashがない場合 = no-token状態から復帰した（auth限定）
+            if token and cached_err == "auth" and not cached_hash:
                 write_log("info:token now available; bypassing no-token auth error cache")
                 return fetch_usage(token)
             # トークンが同じでも、認証エラー時は1回だけ強制再試行する
