@@ -924,14 +924,14 @@ class TestMainIntegration(unittest.TestCase):
                         if env:
                             env_patch = env
                         with patch.dict(os.environ, env_patch, clear=False):
-                            # CLAUDE_NANO_LINE_FORMAT をクリアする場合
+                            # FORMAT/THEME を渡されていない場合は明示的にクリアして、
+                            # 実行環境のシェル変数がテストに漏れ込むのを防ぐ
+                            clear_env = {}
                             if "CLAUDE_NANO_LINE_FORMAT" not in env_patch:
-                                with patch.dict(os.environ, {"CLAUDE_NANO_LINE_FORMAT": ""}, clear=False):
-                                    captured = io.StringIO()
-                                    with patch("sys.stdout", captured):
-                                        cnl.main()
-                                    return captured.getvalue()
-                            else:
+                                clear_env["CLAUDE_NANO_LINE_FORMAT"] = ""
+                            if "CLAUDE_NANO_LINE_THEME" not in env_patch:
+                                clear_env["CLAUDE_NANO_LINE_THEME"] = ""
+                            with patch.dict(os.environ, clear_env, clear=False):
                                 captured = io.StringIO()
                                 with patch("sys.stdout", captured):
                                     cnl.main()
@@ -1415,7 +1415,7 @@ class TestThemePresets(unittest.TestCase):
     }
 
     def test_themes_dict_has_expected_keys(self):
-        expected = {"classic", "minimal", "ocean", "forest", "sunset", "nerd"}
+        expected = {"classic", "minimal", "ocean", "forest", "sunset", "nerd", "harmony"}
         self.assertEqual(set(cnl.THEMES.keys()), expected)
 
     def test_all_themes_render_without_error(self):
@@ -1424,6 +1424,37 @@ class TestThemePresets(unittest.TestCase):
                 out = cnl.render_custom(fmt, 70, self._USAGE, "claude-sonnet-4-6", "/home/user/proj", "main", False)
                 self.assertIsInstance(out, str)
                 self.assertTrue(len(out) > 0)
+
+    def test_harmony_theme_segment_priming_distinct_baseline_colors(self):
+        # Each percentage segment must use a distinct baseline color so the line is
+        # pre-attentively segmentable when all values are below the warn threshold.
+        out = cnl.render_custom(
+            cnl.THEMES["harmony"], 97, self._USAGE, "claude-opus-4-7", "/home/user/proj", "main", False
+        )
+        self.assertIn(cnl.COLOR_MAP["sky_blue"], out)  # ctx baseline
+        self.assertIn(cnl.COLOR_MAP["cyan"], out)  # 5h baseline + branch
+        self.assertIn(cnl.COLOR_MAP["green"], out)  # 7d baseline
+        # No warm colors should appear when all percentages are calm.
+        self.assertNotIn(cnl.COLOR_MAP["yellow"], out)
+        self.assertNotIn(cnl.COLOR_MAP["red"], out)
+
+    def test_harmony_theme_threshold_priming_overrides_baseline(self):
+        # When 5h crosses warn (≥80%) and 7d crosses alert (≥95%), warm colors must
+        # appear so attention is pre-attentively drawn — even though the cool baseline
+        # is the calm-state default.
+        usage = {"five_hour_pct": 85, "seven_day_pct": 96, "five_resets_at": "", "seven_resets_at": ""}
+        out = cnl.render_custom(cnl.THEMES["harmony"], 50, usage, "claude-opus-4-7", "/home/user/proj", "main", False)
+        self.assertIn(cnl.COLOR_MAP["yellow"], out)
+        self.assertIn(cnl.COLOR_MAP["red"], out)
+
+    def test_harmony_theme_dirty_branch_uses_amber_not_red(self):
+        # Dirty marker should use amber (attention without alarm) rather than red,
+        # which is reserved for true quota alerts.
+        out = cnl.render_custom(
+            cnl.THEMES["harmony"], 50, self._USAGE, "claude-opus-4-7", "/home/user/proj", "main", True
+        )
+        self.assertIn(cnl.COLOR_MAP["amber"], out)
+        self.assertIn("main*", strip_ansi(out))
 
     def test_theme_env_used_when_format_not_set(self):
         with patch.dict(os.environ, {"CLAUDE_NANO_LINE_THEME": "ocean"}, clear=False):

@@ -127,6 +127,23 @@ THEMES = {
         "{model|haiku-color:amber,sonnet-color:sky_blue,opus-color:pink} "
         "{cwd_short|color:bold_yellow} {branch_dirty|color:cyan,dirty-color:red}"
     ),
+    # Cool segment-priming baseline tuned for low-distraction glanceability:
+    # ctx → sky_blue, 5h → cyan, 7d → green map to "cognitive distance" (now / near / far)
+    # so each percentage is pre-attentively distinguishable without reading the label.
+    # Identity colors mirror Claude Code's native dark-ansi chrome (model pink for opus,
+    # path bold_yellow, branch cyan) so the line harmonizes with the host UI instead of
+    # competing with it. Yellow/red are reserved for warn/alert thresholds — when the
+    # baseline is uniformly cool, a single warm segment is pre-attentive.
+    "harmony": (
+        "{ctx_pct|color:sky_blue,warn-color:yellow,alert-color:red} "
+        "{ctx_used_tokens|color:light_gray}/{ctx_total_tokens|color:light_gray} "
+        "{text:5h|color:gray} {5h_pct|color:cyan,warn-color:yellow,alert-color:red} "
+        "{5h_reset|color:light_gray} "
+        "{text:7d|color:gray} {7d_pct|color:green,warn-color:yellow,alert-color:red} "
+        "{7d_reset|color:light_gray} "
+        "{model|haiku-color:amber,sonnet-color:sky_blue,opus-color:pink} "
+        "{cwd_short|color:bold_yellow} {branch_dirty|color:cyan,dirty-color:amber}"
+    ),
 }
 
 

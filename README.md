@@ -96,14 +96,15 @@ string:
 export CLAUDE_NANO_LINE_THEME=ocean
 ```
 
-| Theme     | Description                                          |
-| --------- | ---------------------------------------------------- |
-| `classic` | Reproduces the default layout                        |
-| `minimal` | Minimal: ctx%, 5h%, model, path                      |
-| `ocean`   | Blue/cyan palette                                    |
-| `forest`  | Green palette                                        |
-| `sunset`  | Warm amber/pink palette                              |
-| `nerd`    | Maximum density: token counts + reset times included |
+| Theme     | Description                                                                                |
+| --------- | ------------------------------------------------------------------------------------------ |
+| `classic` | Reproduces the default layout                                                              |
+| `minimal` | Minimal: ctx%, 5h%, model, path                                                            |
+| `ocean`   | Blue/cyan palette                                                                          |
+| `forest`  | Green palette                                                                              |
+| `sunset`  | Warm amber/pink palette                                                                    |
+| `nerd`    | Maximum density: token counts + reset times included                                       |
+| `harmony` | Cool segment-priming (ctx/5h/7d → sky-blue/cyan/green); warm hues reserved for warn/alert  |
 
 `CLAUDE_NANO_LINE_FORMAT` takes priority over `CLAUDE_NANO_LINE_THEME`. An
 unknown theme name silently falls back to the default layout.
