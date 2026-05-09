@@ -101,7 +101,7 @@ export CLAUDE_NANO_LINE_THEME=ocean
 | `forest`  | 緑系カラー                                                                 |
 | `sunset`  | アンバー/ピンク系の暖色カラー                                              |
 | `nerd`    | 最大情報密度: トークン数・リセット時刻付                                   |
-| `harmony` | 寒色セグメントプライミング (ctx/5h/7d→空/シアン/緑)。暖色は warn/alert 専用 |
+| `harmony` | 寒色セグメントプライミング (ctx/5h/7d→空/シアン/緑)。右側に Claude Code ネイティブのセッションメタ（差分行数・経過時間・コスト・effort）。暖色は warn/alert 専用 |
 
 `CLAUDE_NANO_LINE_FORMAT` は `CLAUDE_NANO_LINE_THEME` より優先されます。不明なテーマ名はサイレントにデフォルトレイアウトへフォールバックします。
 
@@ -169,6 +169,17 @@ export CLAUDE_NANO_LINE_THEME=ocean
 | `ctx_tokens`       | `140k`            | コンテキスト残りトークン数（モデル名から推定）                        |
 | `ctx_used_tokens`  | `60k`             | コンテキスト使用トークン数（モデル名から推定）                        |
 | `ctx_total_tokens` | `200k`            | コンテキスト総トークン数（モデル名から推定）                          |
+| `duration`         | `14m` / `2h12m`   | セッションの経過時間（`cost.total_duration_ms` から）                 |
+| `api_duration`     | `47s`             | API 待ち時間の合計（`cost.total_api_duration_ms` から）               |
+| `cost`             | `$0.42`           | セッション推定コスト（`cost.total_cost_usd` から）                    |
+| `lines_added`      | `+156`            | このセッションで追加された行数（`cost.total_lines_added` から）       |
+| `lines_removed`    | `-23`             | このセッションで削除された行数（`cost.total_lines_removed` から）     |
+| `effort`           | `max`             | reasoning effort レベル（`effort.level` から）                        |
+| `output_style`     | `default`         | アクティブな output style（`output_style.name` から）                 |
+| `session_name`     | `audit-pr`        | カスタムセッション名（`session_name` から）                           |
+| `vim_mode`         | `NORMAL`          | Vim モード（vim editor mode 有効時、`vim.mode` から）                 |
+| `version`          | `2.1.90`          | Claude Code バージョン（`version` から）                              |
+| `exceeds_200k`     | `200k+`           | トークン総量が 200k を超えた時に表示するインジケータ                  |
 
 ### オプション一覧
 
@@ -187,7 +198,11 @@ export CLAUDE_NANO_LINE_THEME=ocean
 | `on-error`        | `5h_pct`, `7d_pct`, `*_reset`, `*_reset_at`, `cmd` | `hide` / `text(文字列)`                                               | （エラー文字列を表示）   | API エラーまたはコマンド失敗時の表示制御（`hide`=非表示、`text(...)`=カスタム文字列を表示）          |
 | `timeout`         | `cmd`                    | 数値（秒）                                                                        | `2`                      | コマンド実行のタイムアウト秒数。超過時は空文字を返す                                                  |
 | `hide-under`      | `ctx_pct`, `5h_pct`, `7d_pct`               | 数値（%）                                                                  | —                        | 使用率が N% 未満の場合に非表示にする（データ欠損時も非表示）。例: `hide-under:70`                    |
-| `hide-if`         | `branch`, `branch_dirty`, `model`, `cwd`, `cwd_short`, `cwd_full` | 文字列                                                | —                        | 解決後の値が指定文字列と完全一致（大文字小文字区別）する場合に非表示にする                           |
+| `hide-under-sec`  | `duration`, `api_duration`                  | 数値（秒）                                                                 | —                        | 経過時間が N 秒未満の場合に非表示にする。例: `hide-under-sec:60`                                     |
+| `hide-zero`       | `cost`, `lines_added`, `lines_removed`      | `1`                                                                        | —                        | 値がちょうど 0 の場合に非表示にする                                                                  |
+| `digits`          | `cost`                                      | 数値                                                                       | `2`                      | コスト金額の小数桁数（例: `digits:3` → `$0.421`）                                                    |
+| `text`            | `exceeds_200k`                              | 文字列                                                                     | `200k+`                  | インジケータ発火時に表示するカスタムラベル                                                          |
+| `hide-if`         | `branch`, `branch_dirty`, `model`, `cwd`, `cwd_short`, `cwd_full`, `effort`, `output_style`, `vim_mode` | 文字列                              | —                        | 解決後の値が指定文字列と完全一致（大文字小文字区別）する場合に非表示にする                           |
 | `dirty-suffix`    | `branch`, `branch_dirty` | 文字列                                                                            | `*` / `""`               | dirty 時に付加するサフィックス（`branch_dirty` デフォルト: `*`、`branch` はデフォルト空でオプトイン） |
 | `dirty-color`     | `branch`, `branch_dirty` | 色名                                                                              | `color` にフォールバック | dirty 時の色                                                                                          |
 | `haiku-color`     | `model`                  | 色名                                                                              | `amber`                  | Haiku モデル時の色                                                                                    |

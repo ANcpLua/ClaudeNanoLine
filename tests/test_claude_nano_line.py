@@ -1934,5 +1934,149 @@ class TestGetUsageDataResetOverride(unittest.TestCase):
         self.assertNotIn("five_hour_pct", data)
 
 
+class TestFmtDurationMs(unittest.TestCase):
+    def test_none(self):
+        self.assertEqual(cnl.fmt_duration_ms(None), "")
+
+    def test_invalid(self):
+        self.assertEqual(cnl.fmt_duration_ms("nope"), "")
+
+    def test_seconds(self):
+        self.assertEqual(cnl.fmt_duration_ms(45_000), "45s")
+
+    def test_minutes(self):
+        self.assertEqual(cnl.fmt_duration_ms(840_000), "14m")
+
+    def test_hour_only(self):
+        self.assertEqual(cnl.fmt_duration_ms(3_600_000), "1h")
+
+    def test_hour_with_minutes(self):
+        self.assertEqual(cnl.fmt_duration_ms(7_920_000), "2h12m")
+
+
+class TestFmtCost(unittest.TestCase):
+    def test_none(self):
+        self.assertEqual(cnl.fmt_cost(None), "")
+
+    def test_invalid(self):
+        self.assertEqual(cnl.fmt_cost("nope"), "")
+
+    def test_default_digits(self):
+        self.assertEqual(cnl.fmt_cost(0.42), "$0.42")
+
+    def test_custom_digits(self):
+        self.assertEqual(cnl.fmt_cost(3.14159, digits=3), "$3.142")
+
+    def test_zero(self):
+        self.assertEqual(cnl.fmt_cost(0), "$0.00")
+
+
+class TestNativeMetaTokens(unittest.TestCase):
+    def _render(self, fmt, meta):
+        return strip_ansi(cnl.render_custom(fmt, None, {}, "claude-opus-4-7", "/home/user", "main", False, meta))
+
+    def test_duration_renders(self):
+        out = self._render("{duration}", {"duration_ms": 845_000})
+        self.assertEqual(out, "14m")
+
+    def test_duration_hide_under_sec(self):
+        out = self._render("{duration|hide-under-sec:60}", {"duration_ms": 45_000})
+        self.assertEqual(out, "")
+
+    def test_duration_above_threshold_shown(self):
+        out = self._render("{duration|hide-under-sec:60}", {"duration_ms": 120_000})
+        self.assertEqual(out, "2m")
+
+    def test_duration_missing_hidden(self):
+        self.assertEqual(self._render("{duration}", {}), "")
+
+    def test_api_duration_renders(self):
+        out = self._render("{api_duration}", {"api_duration_ms": 7_000})
+        self.assertEqual(out, "7s")
+
+    def test_cost_renders(self):
+        out = self._render("{cost}", {"cost_usd": 0.42})
+        self.assertEqual(out, "$0.42")
+
+    def test_cost_custom_digits(self):
+        out = self._render("{cost|digits:3}", {"cost_usd": 3.14159})
+        self.assertEqual(out, "$3.142")
+
+    def test_cost_hide_zero(self):
+        self.assertEqual(self._render("{cost|hide-zero:1}", {"cost_usd": 0}), "")
+
+    def test_cost_zero_shown_without_hide(self):
+        self.assertEqual(self._render("{cost}", {"cost_usd": 0}), "$0.00")
+
+    def test_cost_missing_hidden(self):
+        self.assertEqual(self._render("{cost}", {}), "")
+
+    def test_lines_added_renders_with_plus(self):
+        self.assertEqual(self._render("{lines_added}", {"lines_added": 156}), "+156")
+
+    def test_lines_removed_renders_with_minus(self):
+        self.assertEqual(self._render("{lines_removed}", {"lines_removed": 23}), "-23")
+
+    def test_lines_added_hide_zero(self):
+        self.assertEqual(self._render("{lines_added|hide-zero:1}", {"lines_added": 0}), "")
+
+    def test_lines_added_zero_shown_without_hide(self):
+        self.assertEqual(self._render("{lines_added}", {"lines_added": 0}), "+0")
+
+    def test_effort_renders(self):
+        self.assertEqual(self._render("{effort}", {"effort_level": "max"}), "max")
+
+    def test_effort_hide_if_default(self):
+        self.assertEqual(self._render("{effort|hide-if:medium}", {"effort_level": "medium"}), "")
+
+    def test_effort_missing_hidden(self):
+        self.assertEqual(self._render("{effort}", {}), "")
+
+    def test_output_style_renders(self):
+        self.assertEqual(self._render("{output_style}", {"output_style": "explanatory"}), "explanatory")
+
+    def test_output_style_hide_if(self):
+        self.assertEqual(self._render("{output_style|hide-if:default}", {"output_style": "default"}), "")
+
+    def test_session_name_renders(self):
+        self.assertEqual(self._render("{session_name}", {"session_name": "audit-pr"}), "audit-pr")
+
+    def test_vim_mode_renders(self):
+        self.assertEqual(self._render("{vim_mode}", {"vim_mode": "NORMAL"}), "NORMAL")
+
+    def test_vim_mode_hide_if(self):
+        self.assertEqual(self._render("{vim_mode|hide-if:NORMAL}", {"vim_mode": "NORMAL"}), "")
+
+    def test_version_renders(self):
+        self.assertEqual(self._render("{version}", {"version": "2.1.90"}), "2.1.90")
+
+    def test_exceeds_200k_shows_when_true(self):
+        self.assertEqual(self._render("{exceeds_200k}", {"exceeds_200k": True}), "200k+")
+
+    def test_exceeds_200k_hidden_when_false(self):
+        self.assertEqual(self._render("{exceeds_200k}", {"exceeds_200k": False}), "")
+
+    def test_exceeds_200k_custom_text(self):
+        self.assertEqual(self._render("{exceeds_200k|text:WIDE}", {"exceeds_200k": True}), "WIDE")
+
+    def test_meta_default_empty_dict(self):
+        # render_custom must not crash when meta is None / omitted.
+        out = strip_ansi(cnl.render_custom("{duration}{cost}", None, {}, "claude-opus-4-7", "/x", "main"))
+        self.assertEqual(out, "")
+
+
+class TestHarmonyTheme(unittest.TestCase):
+    """harmony は ADHD-friendly steady-state / native Claude Code 右側メタを束ねる
+    プロジェクトのフラッグシップ theme。THEMES dict に存在し、新トークンを参照する。"""
+
+    def test_harmony_in_themes(self):
+        self.assertIn("harmony", cnl.THEMES)
+
+    def test_harmony_includes_native_meta_tokens(self):
+        fmt = cnl.THEMES["harmony"]
+        for token in ("{lines_added", "{lines_removed", "{duration", "{cost", "{effort"):
+            self.assertIn(token, fmt)
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

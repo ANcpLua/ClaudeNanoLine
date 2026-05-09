@@ -104,7 +104,7 @@ export CLAUDE_NANO_LINE_THEME=ocean
 | `forest`  | Green palette                                                                              |
 | `sunset`  | Warm amber/pink palette                                                                    |
 | `nerd`    | Maximum density: token counts + reset times included                                       |
-| `harmony` | Cool segment-priming (ctx/5h/7d → sky-blue/cyan/green); warm hues reserved for warn/alert  |
+| `harmony` | Cool segment-priming (ctx/5h/7d → sky-blue/cyan/green); native Claude Code metadata on the right (lines diff, session duration, cost, effort); warm hues reserved for warn/alert |
 
 `CLAUDE_NANO_LINE_FORMAT` takes priority over `CLAUDE_NANO_LINE_THEME`. An
 unknown theme name silently falls back to the default layout.
@@ -174,6 +174,17 @@ Use backticks when the command contains `|`, `:`, or `}`. Inside backticks, `` \
 | `ctx_tokens`       | `140k`            | Remaining context tokens (estimated from model)                        |
 | `ctx_used_tokens`  | `60k`             | Used context tokens (estimated from model)                             |
 | `ctx_total_tokens` | `200k`            | Total context tokens (estimated from model)                            |
+| `duration`         | `14m` / `2h12m`   | Wall-clock session time (from `cost.total_duration_ms`)                |
+| `api_duration`     | `47s`             | Total API wait time (from `cost.total_api_duration_ms`)                |
+| `cost`             | `$0.42`           | Estimated session cost (from `cost.total_cost_usd`)                    |
+| `lines_added`      | `+156`            | Lines added this session (from `cost.total_lines_added`)               |
+| `lines_removed`    | `-23`             | Lines removed this session (from `cost.total_lines_removed`)           |
+| `effort`           | `max`             | Reasoning effort level (from `effort.level`)                           |
+| `output_style`     | `default`         | Active output style (from `output_style.name`)                         |
+| `session_name`     | `audit-pr`        | Custom session name (from `session_name`)                              |
+| `vim_mode`         | `NORMAL`          | Vim mode when vim editor mode is on (from `vim.mode`)                  |
+| `version`          | `2.1.90`          | Claude Code version (from `version`)                                   |
+| `exceeds_200k`     | `200k+`           | Indicator when total tokens exceed the 200k threshold                  |
 
 ### Option reference
 
@@ -192,7 +203,11 @@ Use backticks when the command contains `|`, `:`, or `}`. Inside backticks, `` \
 | `on-error`        | `5h_pct`, `7d_pct`, `*_reset`, `*_reset_at`, `cmd` | `hide` / `text(string)`                                               | (show error)          | Controls display when an API error occurs or a command fails (`hide`=hide item, `text(...)`=show custom string) |
 | `timeout`         | `cmd`                    | number (seconds)                                                                  | `2`                   | Command execution timeout. If exceeded, output is empty                                                |
 | `hide-under`      | `ctx_pct`, `5h_pct`, `7d_pct`               | number (%)                                                                 | —                     | Hide the token when usage is below N% (also hides on missing data). Example: `hide-under:70`          |
-| `hide-if`         | `branch`, `branch_dirty`, `model`, `cwd`, `cwd_short`, `cwd_full` | string                                                | —                     | Hide the token when its resolved value equals the given string (exact/case-sensitive match)           |
+| `hide-under-sec`  | `duration`, `api_duration`                  | number (seconds)                                                           | —                     | Hide the token when the duration is below N seconds. Example: `hide-under-sec:60`                     |
+| `hide-zero`       | `cost`, `lines_added`, `lines_removed`      | `1`                                                                        | —                     | Hide the token when the value is exactly zero                                                          |
+| `digits`          | `cost`                                      | number                                                                     | `2`                   | Decimal places for the cost amount (e.g. `digits:3` → `$0.421`)                                       |
+| `text`            | `exceeds_200k`                              | string                                                                     | `200k+`               | Custom label to display when the indicator triggers                                                   |
+| `hide-if`         | `branch`, `branch_dirty`, `model`, `cwd`, `cwd_short`, `cwd_full`, `effort`, `output_style`, `vim_mode` | string                              | —                     | Hide the token when its resolved value equals the given string (exact/case-sensitive match)           |
 | `dirty-suffix`    | `branch`, `branch_dirty` | string                                                                            | `*` / `""`            | Suffix appended when repo is dirty (`branch_dirty` default: `*`; `branch` default: `""` — opt-in only) |
 | `dirty-color`     | `branch`, `branch_dirty` | color name                                                                        | falls back to `color` | Color when repo is dirty                                                                               |
 | `haiku-color`     | `model`                  | color name                                                                        | `amber`               | Color for Haiku model                                                                                  |
