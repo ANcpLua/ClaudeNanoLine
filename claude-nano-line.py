@@ -351,6 +351,15 @@ def fetch_usage(token, force_auth_retry=False):
             write_log("error:limit http_status=429")
             write_cache({"api_error": "limit"})
             return {"api_error": "limit"}
+        if e.code == 403:
+            try:
+                body = json.loads(e.read())
+            except Exception:
+                body = {}
+            if body.get("error", {}).get("type") == "permission_error":
+                write_log("error:forbidden http_status=403 (token scope insufficient)")
+                write_cache({"api_error": "forbidden"})
+                return {"api_error": "forbidden"}
         write_log("error:unknown http_status=" + str(e.code))
         write_cache({"api_error": "unknown"})
         return {"api_error": "unknown"}
@@ -684,6 +693,7 @@ def render_default(ctx_remaining, usage, model, cwd_base, git_branch, git_dirty=
             "auth": "Token Expired (/login)",
             "limit": "Usage API Rate Limit",
             "timeout": "Timeout",
+            "forbidden": "Forbidden",
             "unknown": "Unknown Error",
         }
         five_part = COLOR_MAP["light_gray"] + err_map.get(api_error, "Unknown Error") + RESET
@@ -794,7 +804,13 @@ def render_custom(fmt, ctx_remaining, usage, model, cwd_real, git_branch, git_di
                     return "", ""
                 if mode == "text":
                     return custom_text, COLOR_MAP.get(opts.get("color", "light_gray"), "")
-                err_map = {"auth": "/login", "limit": "Rate Limit", "timeout": "Timeout", "unknown": "Unknown"}
+                err_map = {
+                    "auth": "/login",
+                    "limit": "Rate Limit",
+                    "timeout": "Timeout",
+                    "forbidden": "Forbidden",
+                    "unknown": "Unknown",
+                }
                 return err_map.get(api_error, "Unknown"), COLOR_MAP.get(opts.get("color", "light_gray"), "")
 
             if prefix == "ctx":
@@ -835,7 +851,13 @@ def render_custom(fmt, ctx_remaining, usage, model, cwd_real, git_branch, git_di
                     return "", ""
                 if mode == "text":
                     return custom_text, COLOR_MAP.get(opts.get("color", ""), "")
-                err_map = {"auth": "/login", "limit": "Rate Limit", "timeout": "Timeout", "unknown": "Unknown"}
+                err_map = {
+                    "auth": "/login",
+                    "limit": "Rate Limit",
+                    "timeout": "Timeout",
+                    "forbidden": "Forbidden",
+                    "unknown": "Unknown",
+                }
                 return err_map.get(api_error, "Unknown"), COLOR_MAP.get(opts.get("color", ""), "")
             if name == "5h_reset":
                 iso = usage.get("five_resets_at", "")
@@ -863,7 +885,13 @@ def render_custom(fmt, ctx_remaining, usage, model, cwd_real, git_branch, git_di
                     return "", ""
                 if mode == "text":
                     return custom_text, COLOR_MAP.get(opts.get("color", ""), "")
-                err_map = {"auth": "/login", "limit": "Rate Limit", "timeout": "Timeout", "unknown": "Unknown"}
+                err_map = {
+                    "auth": "/login",
+                    "limit": "Rate Limit",
+                    "timeout": "Timeout",
+                    "forbidden": "Forbidden",
+                    "unknown": "Unknown",
+                }
                 return err_map.get(api_error, "Unknown"), COLOR_MAP.get(opts.get("color", ""), "")
             if name == "5h_reset_at":
                 iso = usage.get("five_resets_at", "")

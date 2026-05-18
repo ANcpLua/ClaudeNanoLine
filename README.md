@@ -328,6 +328,16 @@ The API request timed out. Check your network connection and wait a few minutes
 
 The API rate limit was hit. It will recover automatically after a short wait.
 
+### Shows `Forbidden`
+
+The OAuth token does not carry the `user:profile` scope required by the Usage
+API. This typically affects tokens whose OAuth flow did not request that scope
+(e.g. Claude Code-managed tokens) rather than Claude Desktop tokens. The four
+usage fields render as `Forbidden` and no client-side workaround restores the
+percentages — re-running `/login` may or may not help depending on which OAuth
+client your Claude Code release uses. The log line is
+`error:forbidden http_status=403 (token scope insufficient)`.
+
 ### Checking logs
 
 Detailed API call logs are written to

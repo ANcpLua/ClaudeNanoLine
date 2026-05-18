@@ -311,6 +311,10 @@ class TestRenderDefault(unittest.TestCase):
         out = strip_ansi(cnl.render_default(None, self._usage(api_error="unknown"), "sonnet", "proj", ""))
         self.assertIn("Unknown Error", out)
 
+    def test_api_error_forbidden(self):
+        out = strip_ansi(cnl.render_default(None, self._usage(api_error="forbidden"), "sonnet", "proj", ""))
+        self.assertIn("Forbidden", out)
+
     def test_with_ctx_remaining(self):
         out = strip_ansi(cnl.render_default(70, self._usage(), "sonnet", "proj", ""))
         self.assertIn("[ctx]", out)
@@ -480,6 +484,10 @@ class TestRenderCustom(unittest.TestCase):
     def test_api_error_in_pct(self):
         out = strip_ansi(self._render("{5h_pct}", usage=self._usage(api_error="timeout")))
         self.assertEqual(out, "Timeout")
+
+    def test_api_error_forbidden_in_pct(self):
+        out = strip_ansi(self._render("{5h_pct}", usage=self._usage(api_error="forbidden")))
+        self.assertEqual(out, "Forbidden")
 
     def test_ctx_pct_not_affected_by_api_error(self):
         out = strip_ansi(self._render("{ctx_pct}", ctx=70, usage=self._usage(api_error="timeout")))
@@ -795,6 +803,29 @@ class TestFetchUsage(unittest.TestCase):
         from urllib.error import HTTPError
 
         with patch.object(cnl, "urlopen", side_effect=HTTPError("url", 403, "Forbidden", {}, None)):
+            result = cnl.fetch_usage("mytoken")
+        self.assertEqual(result, {"api_error": "unknown"})
+
+    def test_http_error_403_permission_error(self):
+        # 403 + body の error.type == "permission_error" → 専用バケット "forbidden" に分類
+        import io
+        from urllib.error import HTTPError
+
+        body = io.BytesIO(
+            b'{"type":"error","error":{"type":"permission_error",'
+            b'"message":"OAuth token does not meet scope requirement user:profile"}}'
+        )
+        with patch.object(cnl, "urlopen", side_effect=HTTPError("url", 403, "Forbidden", {}, body)):
+            result = cnl.fetch_usage("mytoken")
+        self.assertEqual(result, {"api_error": "forbidden"})
+
+    def test_http_error_403_other_error_type_stays_unknown(self):
+        # 403 でも permission_error 以外のボディは従来通り "unknown" に分類
+        import io
+        from urllib.error import HTTPError
+
+        body = io.BytesIO(b'{"type":"error","error":{"type":"invalid_request_error","message":"bad"}}')
+        with patch.object(cnl, "urlopen", side_effect=HTTPError("url", 403, "Forbidden", {}, body)):
             result = cnl.fetch_usage("mytoken")
         self.assertEqual(result, {"api_error": "unknown"})
 
