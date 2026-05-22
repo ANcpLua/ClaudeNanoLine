@@ -319,6 +319,34 @@ The OAuth access token has expired (tokens have an 8-hour lifetime). Run
 `/login` in Claude Code to obtain a new token. The script checks the
 `expiresAt` field before calling the API, avoiding unnecessary 401 requests.
 
+### Auto-fixing frequent auth expiry (macOS, opt-in)
+
+If Claude Code's authentication keeps breaking, set the environment variable
+`CLAUDE_NANO_LINE_AUTO_FIX_AUTH=1`. When ClaudeNanoLine detects a *confirmed*
+auth failure — a 401 that persists after the built-in forced retry, or a
+Keychain token that has stayed expired for over an hour — it runs
+`security delete-generic-password -s 'Claude Code-credentials'` to clear the
+stale entry, prompting a fresh login.
+
+- **macOS only**, and **disabled by default**. Routine token expiry never
+  triggers it.
+- This command is **destructive**: it deletes the Keychain auth entry, so you
+  will need to re-authenticate with `/login` afterward.
+- To avoid repeated runs, the command fires **at most once per hour** (tracked
+  by the marker `$XDG_STATE_HOME/claude-nano-line/auth-fix.marker`). Each
+  attempt is recorded in the API log (`claude-usage-api.log`) as
+  `info:auth-fix ...`.
+
+Enable it via the `env` block of `~/.claude/settings.json`:
+
+```json
+{
+  "env": {
+    "CLAUDE_NANO_LINE_AUTO_FIX_AUTH": "1"
+  }
+}
+```
+
 ### Shows `Timeout`
 
 The API request timed out. Check your network connection and wait a few minutes

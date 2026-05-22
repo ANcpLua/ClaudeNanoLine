@@ -899,7 +899,9 @@ class TestGetUsageData(unittest.TestCase):
     def test_no_token(self):
         with patch.object(cnl, "read_cache", return_value=None):
             with patch.object(cnl, "get_oauth_token", return_value=None):
-                result = cnl.get_usage_data()
+                # 新規追加の _keychain_auth_stuck() が実 Keychain を叩かないよう固定
+                with patch.object(cnl, "_keychain_auth_stuck", return_value=False):
+                    result = cnl.get_usage_data()
         self.assertEqual(result, {"api_error": "auth"})
 
 
@@ -2076,6 +2078,113 @@ class TestHarmonyTheme(unittest.TestCase):
         fmt = cnl.THEMES["harmony"]
         for token in ("{lines_added", "{lines_removed", "{duration", "{cost", "{effort"):
             self.assertIn(token, fmt)
+
+
+# ── Auth auto-fix (macOS, opt-in) ──────────────────────────────────────────────
+class TestAutoFixKeychainAuth(unittest.TestCase):
+    """認証切れ時の Keychain 自動修復（opt-in / macOS 限定）"""
+
+    def setUp(self):
+        self.tmpdir = tempfile.mkdtemp()
+        self.tmp_path = Path(self.tmpdir)
+        self.marker = self.tmp_path / "auth-fix.marker"
+        # marker は LOG_DIR 由来。LOG_DIR/LOG_FILE を一時パスに差し替えて隔離する
+        self.patcher_log_dir = patch.object(cnl, "LOG_DIR", self.tmp_path)
+        self.patcher_log = patch.object(cnl, "LOG_FILE", self.tmp_path / "test.log")
+        self.patcher_log_dir.start()
+        self.patcher_log.start()
+
+    def tearDown(self):
+        self.patcher_log_dir.stop()
+        self.patcher_log.stop()
+        import shutil
+
+        shutil.rmtree(self.tmpdir, ignore_errors=True)
+
+    # ── maybe_fix_keychain_auth ──
+    def test_fix_skipped_when_env_unset(self):
+        with patch.dict(os.environ, {"CLAUDE_NANO_LINE_AUTO_FIX_AUTH": ""}, clear=False):
+            with patch.object(cnl, "subprocess") as mock_sub:
+                cnl.maybe_fix_keychain_auth("test")
+        mock_sub.run.assert_not_called()
+
+    def test_fix_skipped_on_non_darwin(self):
+        with patch.dict(os.environ, {"CLAUDE_NANO_LINE_AUTO_FIX_AUTH": "1"}, clear=False):
+            with patch("sys.platform", "linux"):
+                with patch.object(cnl, "subprocess") as mock_sub:
+                    cnl.maybe_fix_keychain_auth("test")
+        mock_sub.run.assert_not_called()
+
+    def test_fix_runs_on_darwin_without_marker(self):
+        with patch.dict(os.environ, {"CLAUDE_NANO_LINE_AUTO_FIX_AUTH": "1"}, clear=False):
+            with patch("sys.platform", "darwin"):
+                with patch.object(cnl, "subprocess") as mock_sub:
+                    mock_sub.run.return_value = MagicMock(returncode=0)
+                    cnl.maybe_fix_keychain_auth("test")
+        mock_sub.run.assert_called_once_with(
+            ["security", "delete-generic-password", "-s", "Claude Code-credentials"],
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+        self.assertTrue(self.marker.exists())
+
+    def test_fix_skipped_when_marker_recent(self):
+        self.marker.write_text(str(time.time()))
+        with patch.dict(os.environ, {"CLAUDE_NANO_LINE_AUTO_FIX_AUTH": "1"}, clear=False):
+            with patch("sys.platform", "darwin"):
+                with patch.object(cnl, "subprocess") as mock_sub:
+                    cnl.maybe_fix_keychain_auth("test")
+        mock_sub.run.assert_not_called()
+
+    def test_fix_runs_when_marker_stale(self):
+        self.marker.write_text(str(time.time() - 7200))
+        with patch.dict(os.environ, {"CLAUDE_NANO_LINE_AUTO_FIX_AUTH": "1"}, clear=False):
+            with patch("sys.platform", "darwin"):
+                with patch.object(cnl, "subprocess") as mock_sub:
+                    mock_sub.run.return_value = MagicMock(returncode=0)
+                    cnl.maybe_fix_keychain_auth("test")
+        mock_sub.run.assert_called_once()
+
+    # ── _keychain_auth_stuck ──
+    def test_stuck_false_on_non_darwin(self):
+        with patch("sys.platform", "linux"):
+            self.assertFalse(cnl._keychain_auth_stuck())
+
+    def test_stuck_false_when_no_keychain_entry(self):
+        with patch("sys.platform", "darwin"):
+            with patch.object(cnl.subprocess, "run", return_value=MagicMock(returncode=1)):
+                self.assertFalse(cnl._keychain_auth_stuck())
+
+    def test_stuck_true_when_expired_beyond_grace(self):
+        stdout = json.dumps({"claudeAiOauth": {"expiresAt": int((time.time() - 7200) * 1000)}})
+        with patch("sys.platform", "darwin"):
+            with patch.object(cnl.subprocess, "run", return_value=MagicMock(returncode=0, stdout=stdout)):
+                self.assertTrue(cnl._keychain_auth_stuck())
+
+    def test_stuck_false_when_expired_within_grace(self):
+        stdout = json.dumps({"claudeAiOauth": {"expiresAt": int((time.time() - 60) * 1000)}})
+        with patch("sys.platform", "darwin"):
+            with patch.object(cnl.subprocess, "run", return_value=MagicMock(returncode=0, stdout=stdout)):
+                self.assertFalse(cnl._keychain_auth_stuck())
+
+    def test_stuck_false_when_no_expires_at(self):
+        stdout = json.dumps({"claudeAiOauth": {}})
+        with patch("sys.platform", "darwin"):
+            with patch.object(cnl.subprocess, "run", return_value=MagicMock(returncode=0, stdout=stdout)):
+                self.assertFalse(cnl._keychain_auth_stuck())
+
+    # ── _clear_auth_fix_marker ──
+    def test_clear_marker_removes_file(self):
+        self.marker.write_text(str(time.time()))
+        self.assertTrue(self.marker.exists())
+        cnl._clear_auth_fix_marker()
+        self.assertFalse(self.marker.exists())
+
+    def test_clear_marker_noop_when_absent(self):
+        self.assertFalse(self.marker.exists())
+        cnl._clear_auth_fix_marker()  # 存在しなくても例外を出さない
+        self.assertFalse(self.marker.exists())
 
 
 if __name__ == "__main__":
