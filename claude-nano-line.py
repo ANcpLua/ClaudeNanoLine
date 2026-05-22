@@ -552,7 +552,7 @@ def get_usage_data():
     if not token:
         write_log("warn:no token (expired or missing — run /login in Claude Code)")
         write_cache({"api_error": "auth"})
-        if _keychain_auth_stuck():
+        if _auto_fix_enabled() and _keychain_auth_stuck():
             maybe_fix_keychain_auth("token-stuck-expired")
         return {"api_error": "auth"}
 
