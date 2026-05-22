@@ -43,6 +43,8 @@ CMD_TIMEOUT = 2
 DEFAULT_WARN_PCT = 80
 DEFAULT_CRIT_PCT = 95
 API_URL = "https://api.anthropic.com/api/oauth/usage"
+AUTO_FIX_AUTH_COOLDOWN = 3600  # 認証修復コマンドの再実行を抑止する最短間隔（秒）= 1時間
+AUTH_STUCK_GRACE = 3600  # トークン期限切れがこの秒数を超えたら「更新が詰まっている」とみなす
 
 MODEL_CONTEXT_SIZES = {
     "1m context": 1_000_000,
@@ -277,6 +279,90 @@ def write_log(msg):
         pass
 
 
+# ── Auth auto-fix (macOS, opt-in) ───────────────────────────────────────────────
+def _auth_fix_marker_path() -> Path:
+    """認証修復コマンドの最終実行時刻を記録するマーカーのパス。
+
+    LOG_DIR を呼び出し時に参照するため、LOG_DIR を差し替える既存テストで
+    自動的に隔離される（モジュール定数にしない理由）。
+    """
+    return LOG_DIR / "auth-fix.marker"
+
+
+def _auto_fix_enabled() -> bool:
+    """環境変数 CLAUDE_NANO_LINE_AUTO_FIX_AUTH が truthy なら True（既定 OFF）"""
+    val = os.environ.get("CLAUDE_NANO_LINE_AUTO_FIX_AUTH", "")
+    return val.strip().lower() in ("1", "true", "yes", "on")
+
+
+def _auth_fix_on_cooldown() -> bool:
+    """マーカーの記録時刻からクールダウン期間内なら True（連打防止）"""
+    try:
+        last = float(_auth_fix_marker_path().read_text().strip())
+        return time.time() - last < AUTO_FIX_AUTH_COOLDOWN
+    except Exception:
+        return False
+
+
+def _clear_auth_fix_marker() -> None:
+    """マーカーを削除する（認証回復時に呼び、次の障害エピソードで再び効くようにする）"""
+    try:
+        _auth_fix_marker_path().unlink()
+    except Exception:
+        pass
+
+
+def _keychain_auth_stuck() -> bool:
+    """Keychain にトークンはあるが期限切れが grace 超で継続しているか（Scenario B）"""
+    if sys.platform != "darwin":
+        return False
+    try:
+        result = subprocess.run(
+            ["security", "find-generic-password", "-s", "Claude Code-credentials", "-w"],
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+        if result.returncode != 0:
+            return False
+        oauth = json.loads(result.stdout.strip()).get("claudeAiOauth", {})
+        expires_at = oauth.get("expiresAt")
+        if expires_at is None:
+            return False
+        return time.time() - int(expires_at) / 1000 > AUTH_STUCK_GRACE
+    except Exception:
+        return False
+
+
+def maybe_fix_keychain_auth(reason: str) -> None:
+    """確定した認証障害を検知したとき、macOS Keychain の認証エントリを削除する。
+
+    opt-in (CLAUDE_NANO_LINE_AUTO_FIX_AUTH) かつ macOS 限定。クールダウン中は
+    スキップ。marker を先に書いてから実行することで、コマンドが途中失敗・ハング
+    しても再実行を AUTO_FIX_AUTH_COOLDOWN 秒間抑止する。
+    """
+    try:
+        if not _auto_fix_enabled():
+            return
+        if sys.platform != "darwin":
+            return
+        if _auth_fix_on_cooldown():
+            return
+        LOG_DIR.mkdir(parents=True, exist_ok=True)
+        _auth_fix_marker_path().write_text(str(time.time()))
+        result = subprocess.run(
+            ["security", "delete-generic-password", "-s", "Claude Code-credentials"],
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+        write_log("info:auth-fix attempted reason=" + reason + " rc=" + str(result.returncode))
+    except subprocess.TimeoutExpired:
+        write_log("info:auth-fix timeout reason=" + reason)
+    except Exception as e:
+        write_log("info:auth-fix error=" + str(e))
+
+
 # ── SSL ─────────────────────────────────────────────────────────────────────────
 def _build_ssl_context():
     """HTTPS 用 SSL コンテキストを構築する。
@@ -346,6 +432,8 @@ def fetch_usage(token, force_auth_retry=False):
                     "_auth_retry_done": force_auth_retry,
                 }
             )
+            if force_auth_retry:
+                maybe_fix_keychain_auth("http401")
             return {"api_error": "auth"}
         if e.code == 429:
             write_log("error:limit http_status=429")
@@ -373,6 +461,8 @@ def fetch_usage(token, force_auth_retry=False):
                     "_auth_retry_done": force_auth_retry,
                 }
             )
+            if force_auth_retry:
+                maybe_fix_keychain_auth("urlerror-unauthorized")
             return {"api_error": "auth"}
         write_log("error:unknown url_error=" + str(reason))
         write_cache({"api_error": "unknown"})
@@ -414,6 +504,7 @@ def fetch_usage(token, force_auth_retry=False):
     }
     write_log("ok 5h=" + str(five_pct) + "% 7d=" + str(seven_pct) + "%")
     write_cache(result)
+    _clear_auth_fix_marker()
     return result
 
 
@@ -461,6 +552,8 @@ def get_usage_data():
     if not token:
         write_log("warn:no token (expired or missing — run /login in Claude Code)")
         write_cache({"api_error": "auth"})
+        if _auto_fix_enabled() and _keychain_auth_stuck():
+            maybe_fix_keychain_auth("token-stuck-expired")
         return {"api_error": "auth"}
 
     return fetch_usage(token)
