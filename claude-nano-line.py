@@ -508,6 +508,27 @@ def fetch_usage(token, force_auth_retry=False):
     return result
 
 
+def _fetch_with_auto_fix(token):
+    """トークンを使ってAPIを呼び出す。401エラーの場合、opt-in設定が有効なら
+    同一プロセス内で検証のための強制リトライ -> Keychain自動修復 -> 別のトークンで再試行を試みる。
+    """
+    res = fetch_usage(token)
+    if res.get("api_error") == "auth" and _auto_fix_enabled():
+        # 1回目の401発生後、一時的なエラーか検証するために、同一トークンで1回だけ即時再試行
+        write_log("info:auth error; verifying with instant retry")
+        res2 = fetch_usage(token, force_auth_retry=True)
+        if res2.get("api_error") == "auth":
+            # 2回連続で401エラーとなり、Keychain削除が実行されたはずなので、
+            # 新しいトークン（credentials file 等の別ソース）の取得を試みる
+            new_token = get_oauth_token()
+            if new_token and _token_hash(new_token) != _token_hash(token):
+                write_log("info:keychain auth cleared; retrying with credentials file token")
+                return fetch_usage(new_token)
+        else:
+            return res2
+    return res
+
+
 def _is_reset_since(iso_str, cached_ts):
     """キャッシュ取得時刻から現在までの間にリセット時刻を跨いだか判定"""
     if not iso_str:
@@ -531,16 +552,22 @@ def get_usage_data():
             cached_hash = cached.get("_token_hash")
             if token and cached_hash and _token_hash(token) != cached_hash:
                 write_log("info:token changed; bypassing auth error cache")
-                return fetch_usage(token)
+                return _fetch_with_auto_fix(token)
             # トークンが取得できるのにhashがない場合 = no-token状態から復帰した（auth限定）
             if token and cached_err == "auth" and not cached_hash:
                 write_log("info:token now available; bypassing no-token auth error cache")
-                return fetch_usage(token)
+                return _fetch_with_auto_fix(token)
             # トークンが同じでも、認証エラー時は1回だけ強制再試行する
             if token and cached_hash and not cached.get("_auth_retry_done", False):
                 write_log("info:forcing one auth retry with current token")
                 write_cache({**cached, "_auth_retry_done": True})
-                return fetch_usage(token, force_auth_retry=True)
+                res = fetch_usage(token, force_auth_retry=True)
+                if res.get("api_error") == "auth" and _auto_fix_enabled():
+                    new_token = get_oauth_token()
+                    if new_token and _token_hash(new_token) != _token_hash(token):
+                        write_log("info:keychain auth cleared; retrying with credentials file token")
+                        return fetch_usage(new_token)
+                return res
         ts = cached.get("_ts", 0)
         if _is_reset_since(cached.get("five_resets_at"), ts):
             cached["five_hour_pct"] = 0
@@ -554,9 +581,13 @@ def get_usage_data():
         write_cache({"api_error": "auth"})
         if _auto_fix_enabled() and _keychain_auth_stuck():
             maybe_fix_keychain_auth("token-stuck-expired")
+            new_token = get_oauth_token()
+            if new_token:
+                write_log("info:keychain auth stuck-expired fixed; retrying with credentials file token")
+                return _fetch_with_auto_fix(new_token)
         return {"api_error": "auth"}
 
-    return fetch_usage(token)
+    return _fetch_with_auto_fix(token)
 
 
 # ── Rendering helpers ───────────────────────────────────────────────────────────

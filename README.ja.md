@@ -318,7 +318,7 @@ Claude Code の認証が頻繁に切れる場合、環境変数 `CLAUDE_NANO_LIN
 を設定してください。ClaudeNanoLine が *確定した* 認証障害（組み込みの強制再試行後も
 続く 401、または Keychain のトークンが 1 時間を超えて期限切れのまま）を検知すると、
 `security delete-generic-password -s 'Claude Code-credentials'` を自動実行して
-古い認証エントリを削除し、再ログインを促します。
+古い認証エントリを削除した上で、同一プロセス内で credentials file などの別トークンによる即時リトライ（無ければ再ログイン）を試みます。
 
 - **macOS 限定**かつ**既定では無効**です。通常のトークン期限切れでは発火しません。
 - このコマンドは**破壊的**です。Keychain の認証エントリを削除するため、実行後は
