@@ -561,7 +561,13 @@ def get_usage_data():
             if token and cached_hash and not cached.get("_auth_retry_done", False):
                 write_log("info:forcing one auth retry with current token")
                 write_cache({**cached, "_auth_retry_done": True})
-                return _fetch_with_auto_fix(token)
+                res = fetch_usage(token, force_auth_retry=True)
+                if res.get("api_error") == "auth" and _auto_fix_enabled():
+                    new_token = get_oauth_token()
+                    if new_token and _token_hash(new_token) != _token_hash(token):
+                        write_log("info:keychain auth cleared; retrying with credentials file token")
+                        return fetch_usage(new_token)
+                return res
         ts = cached.get("_ts", 0)
         if _is_reset_since(cached.get("five_resets_at"), ts):
             cached["five_hour_pct"] = 0
