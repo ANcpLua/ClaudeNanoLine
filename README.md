@@ -326,7 +326,7 @@ If Claude Code's authentication keeps breaking, set the environment variable
 auth failure — a 401 that persists after the built-in forced retry, or a
 Keychain token that has stayed expired for over an hour — it runs
 `security delete-generic-password -s 'Claude Code-credentials'` to clear the
-stale entry, prompting a fresh login.
+stale entry, and then immediately retries using other available tokens (e.g., from the credentials file) in the same process, prompting a fresh login if none are found.
 
 - **macOS only**, and **disabled by default**. Routine token expiry never
   triggers it.
