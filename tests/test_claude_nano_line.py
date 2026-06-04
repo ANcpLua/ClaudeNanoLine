@@ -570,7 +570,32 @@ class TestGetGitBranch(unittest.TestCase):
             mock_run.assert_not_called()
 
 
-# ── 10b. TestGetGitDirty ──────────────────────────────────────────────────────
+# ── 10b. TestGetGitCommit ────────────────────────────────────────────────────
+class TestGetGitCommit(unittest.TestCase):
+    def test_success(self):
+        mock_result = MagicMock()
+        mock_result.returncode = 0
+        mock_result.stdout = "abc1234\n"
+        with patch.object(cnl.subprocess, "run", return_value=mock_result):
+            self.assertEqual(cnl.get_git_commit("/some/path"), "abc1234")
+
+    def test_failure(self):
+        mock_result = MagicMock()
+        mock_result.returncode = 1
+        with patch.object(cnl.subprocess, "run", return_value=mock_result):
+            self.assertEqual(cnl.get_git_commit("/some/path"), "")
+
+    def test_exception(self):
+        with patch.object(cnl.subprocess, "run", side_effect=Exception("oops")):
+            self.assertEqual(cnl.get_git_commit("/some/path"), "")
+
+    def test_empty_cwd(self):
+        with patch.object(cnl.subprocess, "run") as mock_run:
+            self.assertEqual(cnl.get_git_commit(""), "")
+            mock_run.assert_not_called()
+
+
+# ── 10c. TestGetGitDirty ──────────────────────────────────────────────────────
 class TestGetGitDirty(unittest.TestCase):
     def _mock_run(self, returncode, stdout=""):
         r = MagicMock()
