@@ -202,6 +202,24 @@ def get_git_dirty(cwd):
     return False
 
 
+# ── Git commit (detached HEAD fallback) ─────────────────────────────────────────
+def get_git_commit(cwd):
+    if not cwd:
+        return ""
+    try:
+        result = subprocess.run(
+            ["git", "-C", cwd, "rev-parse", "--short=7", "HEAD"],
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+        if result.returncode == 0:
+            return result.stdout.strip()
+    except Exception:
+        pass
+    return ""
+
+
 # ── OAuth token ─────────────────────────────────────────────────────────────────
 def _extract_token(oauth_data):
     """claudeAiOauth dict からトークンを取り出し、期限切れなら warn ログを出す。
@@ -1337,7 +1355,7 @@ def main():
         "exceeds_200k": input_data.get("exceeds_200k_tokens"),
     }
 
-    git_branch = get_git_branch(cwd_real)
+    git_branch = get_git_branch(cwd_real) or get_git_commit(cwd_real)
     git_dirty = get_git_dirty(cwd_real) if git_branch else False
     usage = get_usage_data()
 
