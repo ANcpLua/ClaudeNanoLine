@@ -89,8 +89,17 @@ COLOR_MAP = {
     "sky_blue": "\033[38;5;117m",
     "pink": "\033[38;5;213m",
     "amber": "\033[38;5;179m",
+    "purple": "\033[38;5;141m",
     "bold": "\033[1m",
     "bold_yellow": "\033[1;33m",
+}
+
+EFFORT_DEFAULT_COLORS = {
+    "low": "yellow",
+    "medium": "green",
+    "high": "sky_blue",
+    "xhigh": "purple",
+    "max": "red",
 }
 
 THEMES = {
@@ -1124,7 +1133,9 @@ def render_custom(fmt, ctx_remaining, usage, model, cwd_real, git_branch, git_di
                 return "", ""
             if opts.get("hide-if", "") == level:
                 return "", ""
-            return level, COLOR_MAP.get(opts.get("color", ""), "")
+            # color 優先順位: <level>-color > color > レベル別デフォルト
+            color_key = opts.get(level + "-color") or opts.get("color") or EFFORT_DEFAULT_COLORS.get(level, "")
+            return level, COLOR_MAP.get(color_key, "")
 
         if name == "output_style":
             style = meta.get("output_style") or ""

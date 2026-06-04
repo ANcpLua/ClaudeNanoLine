@@ -174,7 +174,7 @@ export CLAUDE_NANO_LINE_THEME=ocean
 | `cost`             | `$0.42`           | セッション推定コスト（`cost.total_cost_usd` から）                    |
 | `lines_added`      | `+156`            | このセッションで追加された行数（`cost.total_lines_added` から）       |
 | `lines_removed`    | `-23`             | このセッションで削除された行数（`cost.total_lines_removed` から）     |
-| `effort`           | `max`             | reasoning effort レベル（`effort.level` から）                        |
+| `effort`           | `max`             | reasoning effort レベル（`effort.level` から）。デフォルト色: low=yellow, medium=green, high=sky\_blue, xhigh=purple, max=red |
 | `output_style`     | `default`         | アクティブな output style（`output_style.name` から）                 |
 | `session_name`     | `audit-pr`        | カスタムセッション名（`session_name` から）                           |
 | `vim_mode`         | `NORMAL`          | Vim モード（vim editor mode 有効時、`vim.mode` から）                 |
@@ -208,11 +208,12 @@ export CLAUDE_NANO_LINE_THEME=ocean
 | `haiku-color`     | `model`                  | 色名                                                                              | `amber`                  | Haiku モデル時の色                                                                                    |
 | `sonnet-color`    | `model`                  | 色名                                                                              | `sky_blue`               | Sonnet モデル時の色                                                                                   |
 | `opus-color`      | `model`                  | 色名                                                                              | `pink`                   | Opus モデル時の色                                                                                     |
+| `<level>-color`   | `effort`                 | 色名                                                                              | レベル別デフォルト（上記参照） | effort のレベル別色上書き。例: `low-color:cyan`, `max-color:magenta`                            |
 
 ### 使用可能な色名
 
 `red`, `green`, `yellow`, `cyan`, `blue`, `magenta`, `gray`, `light_gray`,
-`sky_blue`, `pink`, `amber`, `bold`, `bold_yellow`
+`sky_blue`, `pink`, `amber`, `purple`, `bold`, `bold_yellow`
 
 ### 設定例
 

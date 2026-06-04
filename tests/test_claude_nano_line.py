@@ -2067,6 +2067,51 @@ class TestNativeMetaTokens(unittest.TestCase):
         self.assertEqual(out, "")
 
 
+class TestEffortColor(unittest.TestCase):
+    """effort セグメントのレベル別動的カラーを検証（ANSI を保持して assertIn）"""
+
+    def _render(self, fmt, level):
+        return cnl.render_custom(fmt, None, {}, "sonnet", "", "", meta={"effort_level": level})
+
+    def test_purple_in_color_map(self):
+        self.assertIn("purple", cnl.COLOR_MAP)
+
+    def test_effort_dynamic_color_low(self):
+        self.assertIn(cnl.COLOR_MAP["yellow"], self._render("{effort}", "low"))
+
+    def test_effort_dynamic_color_medium(self):
+        self.assertIn(cnl.COLOR_MAP["green"], self._render("{effort}", "medium"))
+
+    def test_effort_dynamic_color_high(self):
+        self.assertIn(cnl.COLOR_MAP["sky_blue"], self._render("{effort}", "high"))
+
+    def test_effort_dynamic_color_xhigh(self):
+        self.assertIn(cnl.COLOR_MAP["purple"], self._render("{effort}", "xhigh"))
+
+    def test_effort_dynamic_color_max(self):
+        self.assertIn(cnl.COLOR_MAP["red"], self._render("{effort}", "max"))
+
+    def test_effort_color_option_overrides_all_levels(self):
+        out = cnl.render_custom("{effort|color:pink}", None, {}, "sonnet", "", "", meta={"effort_level": "max"})
+        self.assertIn(cnl.COLOR_MAP["pink"], out)
+
+    def test_effort_per_level_color_override(self):
+        out = cnl.render_custom("{effort|max-color:magenta}", None, {}, "sonnet", "", "", meta={"effort_level": "max"})
+        self.assertIn(cnl.COLOR_MAP["magenta"], out)
+
+    def test_effort_per_level_color_beats_color_option(self):
+        out = cnl.render_custom(
+            "{effort|color:pink,low-color:cyan}", None, {}, "sonnet", "", "", meta={"effort_level": "low"}
+        )
+        self.assertIn(cnl.COLOR_MAP["cyan"], out)
+        self.assertNotIn(cnl.COLOR_MAP["pink"], out)
+
+    def test_effort_unknown_level_no_ansi(self):
+        out = self._render("{effort}", "unknown")
+        self.assertEqual(out, "unknown")
+        self.assertNotIn("\033[", out)
+
+
 class TestHarmonyTheme(unittest.TestCase):
     """harmony は ADHD-friendly steady-state / native Claude Code 右側メタを束ねる
     プロジェクトのフラッグシップ theme。THEMES dict に存在し、新トークンを参照する。"""

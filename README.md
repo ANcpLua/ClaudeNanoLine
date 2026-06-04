@@ -179,7 +179,7 @@ Use backticks when the command contains `|`, `:`, or `}`. Inside backticks, `` \
 | `cost`             | `$0.42`           | Estimated session cost (from `cost.total_cost_usd`)                    |
 | `lines_added`      | `+156`            | Lines added this session (from `cost.total_lines_added`)               |
 | `lines_removed`    | `-23`             | Lines removed this session (from `cost.total_lines_removed`)           |
-| `effort`           | `max`             | Reasoning effort level (from `effort.level`)                           |
+| `effort`           | `max`             | Reasoning effort level (from `effort.level`). Color defaults: low=yellow, medium=green, high=sky\_blue, xhigh=purple, max=red |
 | `output_style`     | `default`         | Active output style (from `output_style.name`)                         |
 | `session_name`     | `audit-pr`        | Custom session name (from `session_name`)                              |
 | `vim_mode`         | `NORMAL`          | Vim mode when vim editor mode is on (from `vim.mode`)                  |
@@ -213,11 +213,12 @@ Use backticks when the command contains `|`, `:`, or `}`. Inside backticks, `` \
 | `haiku-color`     | `model`                  | color name                                                                        | `amber`               | Color for Haiku model                                                                                  |
 | `sonnet-color`    | `model`                  | color name                                                                        | `sky_blue`            | Color for Sonnet model                                                                                 |
 | `opus-color`      | `model`                  | color name                                                                        | `pink`                | Color for Opus model                                                                                   |
+| `<level>-color`   | `effort`                 | color name                                                                        | level default (see above) | Per-level color override for `effort`. e.g. `low-color:cyan`, `max-color:magenta`                 |
 
 ### Available color names
 
 `red`, `green`, `yellow`, `cyan`, `blue`, `magenta`, `gray`, `light_gray`,
-`sky_blue`, `pink`, `amber`, `bold`, `bold_yellow`
+`sky_blue`, `pink`, `amber`, `purple`, `bold`, `bold_yellow`
 
 ### Examples
 
