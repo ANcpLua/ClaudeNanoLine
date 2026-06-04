@@ -169,8 +169,8 @@ Use backticks when the command contains `|`, `:`, or `}`. Inside backticks, `` \
 | `cwd`              | `myproject`       | Directory basename                                                     |
 | `cwd_short`        | `~/dev/proj`      | `~`-abbreviated path                                                   |
 | `cwd_full`         | `/Users/.../proj` | Full path                                                              |
-| `branch`           | `main`            | Git branch name                                                        |
-| `branch_dirty`     | `main*`           | Git branch name with dirty marker (`*` when uncommitted changes exist) |
+| `branch`           | `main`            | Git branch name (detached HEAD shows short commit hash, e.g. `abc1234`) |
+| `branch_dirty`     | `main*`           | Git branch name with dirty marker (`*` when uncommitted changes exist); detached HEAD shows hash with marker |
 | `ctx_tokens`       | `140k`            | Remaining context tokens (estimated from model)                        |
 | `ctx_used_tokens`  | `60k`             | Used context tokens (estimated from model)                             |
 | `ctx_total_tokens` | `200k`            | Total context tokens (estimated from model)                            |
