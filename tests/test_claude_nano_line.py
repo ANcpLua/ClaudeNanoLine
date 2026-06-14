@@ -578,7 +578,32 @@ class TestGetGitBranch(unittest.TestCase):
             mock_run.assert_not_called()
 
 
-# ── 10b. TestGetGitDirty ──────────────────────────────────────────────────────
+# ── 10b. TestGetGitCommit ────────────────────────────────────────────────────
+class TestGetGitCommit(unittest.TestCase):
+    def test_success(self):
+        mock_result = MagicMock()
+        mock_result.returncode = 0
+        mock_result.stdout = "abc1234\n"
+        with patch.object(cnl.subprocess, "run", return_value=mock_result):
+            self.assertEqual(cnl.get_git_commit("/some/path"), "abc1234")
+
+    def test_failure(self):
+        mock_result = MagicMock()
+        mock_result.returncode = 1
+        with patch.object(cnl.subprocess, "run", return_value=mock_result):
+            self.assertEqual(cnl.get_git_commit("/some/path"), "")
+
+    def test_exception(self):
+        with patch.object(cnl.subprocess, "run", side_effect=Exception("oops")):
+            self.assertEqual(cnl.get_git_commit("/some/path"), "")
+
+    def test_empty_cwd(self):
+        with patch.object(cnl.subprocess, "run") as mock_run:
+            self.assertEqual(cnl.get_git_commit(""), "")
+            mock_run.assert_not_called()
+
+
+# ── 10c. TestGetGitDirty ──────────────────────────────────────────────────────
 class TestGetGitDirty(unittest.TestCase):
     def _mock_run(self, returncode, stdout=""):
         r = MagicMock()
@@ -930,7 +955,9 @@ class TestGetUsageData(unittest.TestCase):
     def test_no_token(self):
         with patch.object(cnl, "read_cache", return_value=None):
             with patch.object(cnl, "get_oauth_token", return_value=None):
-                result = cnl.get_usage_data()
+                # 新規追加の _keychain_auth_stuck() が実 Keychain を叩かないよう固定
+                with patch.object(cnl, "_keychain_auth_stuck", return_value=False):
+                    result = cnl.get_usage_data()
         self.assertEqual(result, {"api_error": "auth"})
 
 
@@ -2096,6 +2123,51 @@ class TestNativeMetaTokens(unittest.TestCase):
         self.assertEqual(out, "")
 
 
+class TestEffortColor(unittest.TestCase):
+    """effort セグメントのレベル別動的カラーを検証（ANSI を保持して assertIn）"""
+
+    def _render(self, fmt, level):
+        return cnl.render_custom(fmt, None, {}, "sonnet", "", "", meta={"effort_level": level})
+
+    def test_purple_in_color_map(self):
+        self.assertIn("purple", cnl.COLOR_MAP)
+
+    def test_effort_dynamic_color_low(self):
+        self.assertIn(cnl.COLOR_MAP["yellow"], self._render("{effort}", "low"))
+
+    def test_effort_dynamic_color_medium(self):
+        self.assertIn(cnl.COLOR_MAP["green"], self._render("{effort}", "medium"))
+
+    def test_effort_dynamic_color_high(self):
+        self.assertIn(cnl.COLOR_MAP["sky_blue"], self._render("{effort}", "high"))
+
+    def test_effort_dynamic_color_xhigh(self):
+        self.assertIn(cnl.COLOR_MAP["purple"], self._render("{effort}", "xhigh"))
+
+    def test_effort_dynamic_color_max(self):
+        self.assertIn(cnl.COLOR_MAP["red"], self._render("{effort}", "max"))
+
+    def test_effort_color_option_overrides_all_levels(self):
+        out = cnl.render_custom("{effort|color:pink}", None, {}, "sonnet", "", "", meta={"effort_level": "max"})
+        self.assertIn(cnl.COLOR_MAP["pink"], out)
+
+    def test_effort_per_level_color_override(self):
+        out = cnl.render_custom("{effort|max-color:magenta}", None, {}, "sonnet", "", "", meta={"effort_level": "max"})
+        self.assertIn(cnl.COLOR_MAP["magenta"], out)
+
+    def test_effort_per_level_color_beats_color_option(self):
+        out = cnl.render_custom(
+            "{effort|color:pink,low-color:cyan}", None, {}, "sonnet", "", "", meta={"effort_level": "low"}
+        )
+        self.assertIn(cnl.COLOR_MAP["cyan"], out)
+        self.assertNotIn(cnl.COLOR_MAP["pink"], out)
+
+    def test_effort_unknown_level_no_ansi(self):
+        out = self._render("{effort}", "unknown")
+        self.assertEqual(out, "unknown")
+        self.assertNotIn("\033[", out)
+
+
 class TestHarmonyTheme(unittest.TestCase):
     """harmony は ADHD-friendly steady-state / native Claude Code 右側メタを束ねる
     プロジェクトのフラッグシップ theme。THEMES dict に存在し、新トークンを参照する。"""
@@ -2107,6 +2179,245 @@ class TestHarmonyTheme(unittest.TestCase):
         fmt = cnl.THEMES["harmony"]
         for token in ("{lines_added", "{lines_removed", "{duration", "{cost", "{effort"):
             self.assertIn(token, fmt)
+
+
+# ── Auth auto-fix (macOS, opt-in) ──────────────────────────────────────────────
+class TestAutoFixKeychainAuth(unittest.TestCase):
+    """認証切れ時の Keychain 自動修復（opt-in / macOS 限定）"""
+
+    def setUp(self):
+        self.tmpdir = tempfile.mkdtemp()
+        self.tmp_path = Path(self.tmpdir)
+        self.marker = self.tmp_path / "auth-fix.marker"
+        # marker は LOG_DIR 由来。LOG_DIR/LOG_FILE を一時パスに差し替えて隔離する
+        self.patcher_log_dir = patch.object(cnl, "LOG_DIR", self.tmp_path)
+        self.patcher_log = patch.object(cnl, "LOG_FILE", self.tmp_path / "test.log")
+        self.patcher_log_dir.start()
+        self.patcher_log.start()
+
+    def tearDown(self):
+        self.patcher_log_dir.stop()
+        self.patcher_log.stop()
+        import shutil
+
+        shutil.rmtree(self.tmpdir, ignore_errors=True)
+
+    # ── maybe_fix_keychain_auth ──
+    def test_fix_skipped_when_env_unset(self):
+        with patch.dict(os.environ, {"CLAUDE_NANO_LINE_AUTO_FIX_AUTH": ""}, clear=False):
+            with patch.object(cnl, "subprocess") as mock_sub:
+                cnl.maybe_fix_keychain_auth("test")
+        mock_sub.run.assert_not_called()
+
+    def test_fix_skipped_on_non_darwin(self):
+        with patch.dict(os.environ, {"CLAUDE_NANO_LINE_AUTO_FIX_AUTH": "1"}, clear=False):
+            with patch("sys.platform", "linux"):
+                with patch.object(cnl, "subprocess") as mock_sub:
+                    cnl.maybe_fix_keychain_auth("test")
+        mock_sub.run.assert_not_called()
+
+    def test_fix_runs_on_darwin_without_marker(self):
+        with patch.dict(os.environ, {"CLAUDE_NANO_LINE_AUTO_FIX_AUTH": "1"}, clear=False):
+            with patch("sys.platform", "darwin"):
+                with patch.object(cnl, "subprocess") as mock_sub:
+                    mock_sub.run.return_value = MagicMock(returncode=0)
+                    cnl.maybe_fix_keychain_auth("test")
+        mock_sub.run.assert_called_once_with(
+            ["security", "delete-generic-password", "-s", "Claude Code-credentials"],
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+        self.assertTrue(self.marker.exists())
+
+    def test_fix_skipped_when_marker_recent(self):
+        self.marker.write_text(str(time.time()))
+        with patch.dict(os.environ, {"CLAUDE_NANO_LINE_AUTO_FIX_AUTH": "1"}, clear=False):
+            with patch("sys.platform", "darwin"):
+                with patch.object(cnl, "subprocess") as mock_sub:
+                    cnl.maybe_fix_keychain_auth("test")
+        mock_sub.run.assert_not_called()
+
+    def test_fix_runs_when_marker_stale(self):
+        self.marker.write_text(str(time.time() - 7200))
+        with patch.dict(os.environ, {"CLAUDE_NANO_LINE_AUTO_FIX_AUTH": "1"}, clear=False):
+            with patch("sys.platform", "darwin"):
+                with patch.object(cnl, "subprocess") as mock_sub:
+                    mock_sub.run.return_value = MagicMock(returncode=0)
+                    cnl.maybe_fix_keychain_auth("test")
+        mock_sub.run.assert_called_once()
+
+    # ── _keychain_auth_stuck ──
+    def test_stuck_false_on_non_darwin(self):
+        with patch("sys.platform", "linux"):
+            self.assertFalse(cnl._keychain_auth_stuck())
+
+    def test_stuck_false_when_no_keychain_entry(self):
+        with patch("sys.platform", "darwin"):
+            with patch.object(cnl.subprocess, "run", return_value=MagicMock(returncode=1)):
+                self.assertFalse(cnl._keychain_auth_stuck())
+
+    def test_stuck_true_when_expired_beyond_grace(self):
+        stdout = json.dumps({"claudeAiOauth": {"expiresAt": int((time.time() - 7200) * 1000)}})
+        with patch("sys.platform", "darwin"):
+            with patch.object(cnl.subprocess, "run", return_value=MagicMock(returncode=0, stdout=stdout)):
+                self.assertTrue(cnl._keychain_auth_stuck())
+
+    def test_stuck_false_when_expired_within_grace(self):
+        stdout = json.dumps({"claudeAiOauth": {"expiresAt": int((time.time() - 60) * 1000)}})
+        with patch("sys.platform", "darwin"):
+            with patch.object(cnl.subprocess, "run", return_value=MagicMock(returncode=0, stdout=stdout)):
+                self.assertFalse(cnl._keychain_auth_stuck())
+
+    def test_stuck_false_when_no_expires_at(self):
+        stdout = json.dumps({"claudeAiOauth": {}})
+        with patch("sys.platform", "darwin"):
+            with patch.object(cnl.subprocess, "run", return_value=MagicMock(returncode=0, stdout=stdout)):
+                self.assertFalse(cnl._keychain_auth_stuck())
+
+    # ── _clear_auth_fix_marker ──
+    def test_clear_marker_removes_file(self):
+        self.marker.write_text(str(time.time()))
+        self.assertTrue(self.marker.exists())
+        cnl._clear_auth_fix_marker()
+        self.assertFalse(self.marker.exists())
+
+    def test_clear_marker_noop_when_absent(self):
+        self.assertFalse(self.marker.exists())
+        cnl._clear_auth_fix_marker()  # 存在しなくても例外を出さない
+        self.assertFalse(self.marker.exists())
+
+
+# ── 同一プロセス内でのKeychain自動修復と別トークンでの即時リトライのテスト ───────
+class TestAutoFixOneRunRetries(unittest.TestCase):
+    """同一プロセス内（1回の実行）でのKeychain自動修復と別トークンでの即時リトライのテスト"""
+
+    def setUp(self):
+        self.tmpdir = tempfile.mkdtemp()
+        self.tmp_path = Path(self.tmpdir)
+        self.marker = self.tmp_path / "auth-fix.marker"
+        self.patcher_log_dir = patch.object(cnl, "LOG_DIR", self.tmp_path)
+        self.patcher_log = patch.object(cnl, "LOG_FILE", self.tmp_path / "test.log")
+        self.patcher_log_dir.start()
+        self.patcher_log.start()
+
+    def tearDown(self):
+        self.patcher_log_dir.stop()
+        self.patcher_log.stop()
+        import shutil
+
+        shutil.rmtree(self.tmpdir, ignore_errors=True)
+
+    def test_one_run_fix_on_http401(self):
+        """最初の実行で401エラーが発生したとき、即時リトライ -> Keychainクリア -> credentials fileから有効トークンを取得して成功するシナリオ"""
+        # シナリオ設定:
+        # get_oauth_token は 最初は "bad_keychain_token" を返し、Keychainクリア後は "good_credentials_token" を返す。
+        # urlopen は、"bad_keychain_token" に対しては HTTPError(401) を投げ、
+        # "good_credentials_token" に対しては成功レスポンスを返す。
+        from urllib.error import HTTPError
+
+        def side_effect_urlopen(req, *args, **kwargs):
+            auth_header = req.headers.get("Authorization", "")
+            token = auth_header.replace("Bearer ", "")
+            if token == "bad_keychain_token":
+                raise HTTPError(req.full_url, 401, "Unauthorized", {}, None)
+            else:
+                mock_resp = MagicMock()
+                resp_data = {
+                    "five_hour": {"utilization": 50, "resets_at": ""},
+                    "seven_day": {"utilization": 70, "resets_at": ""},
+                }
+                mock_resp.read.return_value = json.dumps(resp_data).encode()
+                mock_resp.__enter__.return_value = mock_resp
+                return mock_resp
+
+        with patch.dict(os.environ, {"CLAUDE_NANO_LINE_AUTO_FIX_AUTH": "1"}, clear=False):
+            with patch("sys.platform", "darwin"):
+                with patch.object(cnl, "read_cache", return_value=None):
+                    with patch.object(cnl, "get_oauth_token") as mock_get_token:
+                        with patch.object(cnl, "urlopen") as mock_urlopen:
+                            with patch.object(cnl, "subprocess") as mock_sub:
+                                mock_sub.run.return_value = MagicMock(returncode=0)
+
+                                # get_oauth_token の段階的な動作をシミュレート
+                                def get_token_seq():
+                                    if mock_sub.run.called:
+                                        return "good_credentials_token"
+                                    return "bad_keychain_token"
+
+                                mock_get_token.side_effect = get_token_seq
+                                mock_urlopen.side_effect = side_effect_urlopen
+
+                                result = cnl.get_usage_data()
+
+        self.assertEqual(result["five_hour_pct"], 50)
+        self.assertEqual(result["seven_day_pct"], 70)
+        self.assertEqual(mock_urlopen.call_count, 3)
+        mock_sub.run.assert_called_once_with(
+            ["security", "delete-generic-password", "-s", "Claude Code-credentials"],
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+
+    def test_one_run_fix_on_stuck_expired(self):
+        """get_oauth_token が None を返し（期限切れstuck検知）、即座にKeychain削除 -> credentials fileから有効トークンを取得して成功するシナリオ"""
+        with patch.dict(os.environ, {"CLAUDE_NANO_LINE_AUTO_FIX_AUTH": "1"}, clear=False):
+            with patch("sys.platform", "darwin"):
+                with patch.object(cnl, "read_cache", return_value=None):
+                    with patch.object(cnl, "_keychain_auth_stuck", return_value=True):
+                        with patch.object(cnl, "get_oauth_token") as mock_get_token:
+                            with patch.object(cnl, "urlopen") as mock_urlopen:
+                                with patch.object(cnl, "subprocess") as mock_sub:
+                                    mock_sub.run.return_value = MagicMock(returncode=0)
+
+                                    # get_oauth_token は最初は None、Keychain削除された（subprocess.runされた）後は "good_token" を返す。
+                                    def get_token_seq():
+                                        if mock_sub.run.called:
+                                            return "good_token"
+                                        return None
+
+                                    mock_get_token.side_effect = get_token_seq
+
+                                    mock_resp = MagicMock()
+                                    resp_data = {
+                                        "five_hour": {"utilization": 30, "resets_at": ""},
+                                        "seven_day": {"utilization": 50, "resets_at": ""},
+                                    }
+                                    mock_resp.read.return_value = json.dumps(resp_data).encode()
+                                    mock_resp.__enter__.return_value = mock_resp
+                                    mock_urlopen.return_value = mock_resp
+
+                                    result = cnl.get_usage_data()
+
+        self.assertEqual(result["five_hour_pct"], 30)
+        self.assertEqual(result["seven_day_pct"], 50)
+        mock_sub.run.assert_called_once_with(
+            ["security", "delete-generic-password", "-s", "Claude Code-credentials"],
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+        mock_urlopen.assert_called_once()
+
+    def test_one_run_fix_respects_cooldown(self):
+        """クールダウン期間中の場合、Keychain削除がスキップされるテスト"""
+        self.marker.write_text(str(time.time()))
+        from urllib.error import HTTPError
+
+        with patch.dict(os.environ, {"CLAUDE_NANO_LINE_AUTO_FIX_AUTH": "1"}, clear=False):
+            with patch("sys.platform", "darwin"):
+                with patch.object(cnl, "read_cache", return_value=None):
+                    with patch.object(cnl, "get_oauth_token", return_value="bad_token"):
+                        with patch.object(
+                            cnl, "urlopen", side_effect=HTTPError("url", 401, "Unauthorized", {}, None)
+                        ) as mock_urlopen:
+                            with patch.object(cnl, "subprocess") as mock_sub:
+                                result = cnl.get_usage_data()
+
+        self.assertEqual(result, {"api_error": "auth"})
+        self.assertEqual(mock_urlopen.call_count, 2)
+        mock_sub.run.assert_not_called()
 
 
 if __name__ == "__main__":

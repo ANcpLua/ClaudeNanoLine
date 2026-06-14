@@ -169,8 +169,8 @@ Use backticks when the command contains `|`, `:`, or `}`. Inside backticks, `` \
 | `cwd`              | `myproject`       | Directory basename                                                     |
 | `cwd_short`        | `~/dev/proj`      | `~`-abbreviated path                                                   |
 | `cwd_full`         | `/Users/.../proj` | Full path                                                              |
-| `branch`           | `main`            | Git branch name                                                        |
-| `branch_dirty`     | `main*`           | Git branch name with dirty marker (`*` when uncommitted changes exist) |
+| `branch`           | `main`            | Git branch name (detached HEAD shows short commit hash, e.g. `abc1234`) |
+| `branch_dirty`     | `main*`           | Git branch name with dirty marker (`*` when uncommitted changes exist); detached HEAD shows hash with marker |
 | `ctx_tokens`       | `140k`            | Remaining context tokens (estimated from model)                        |
 | `ctx_used_tokens`  | `60k`             | Used context tokens (estimated from model)                             |
 | `ctx_total_tokens` | `200k`            | Total context tokens (estimated from model)                            |
@@ -179,7 +179,7 @@ Use backticks when the command contains `|`, `:`, or `}`. Inside backticks, `` \
 | `cost`             | `$0.42`           | Estimated session cost (from `cost.total_cost_usd`)                    |
 | `lines_added`      | `+156`            | Lines added this session (from `cost.total_lines_added`)               |
 | `lines_removed`    | `-23`             | Lines removed this session (from `cost.total_lines_removed`)           |
-| `effort`           | `max`             | Reasoning effort level (from `effort.level`)                           |
+| `effort`           | `max`             | Reasoning effort level (from `effort.level`). Color defaults: low=yellow, medium=green, high=sky\_blue, xhigh=purple, max=red |
 | `output_style`     | `default`         | Active output style (from `output_style.name`)                         |
 | `session_name`     | `audit-pr`        | Custom session name (from `session_name`)                              |
 | `vim_mode`         | `NORMAL`          | Vim mode when vim editor mode is on (from `vim.mode`)                  |
@@ -213,11 +213,12 @@ Use backticks when the command contains `|`, `:`, or `}`. Inside backticks, `` \
 | `haiku-color`     | `model`                  | color name                                                                        | `amber`               | Color for Haiku model                                                                                  |
 | `sonnet-color`    | `model`                  | color name                                                                        | `sky_blue`            | Color for Sonnet model                                                                                 |
 | `opus-color`      | `model`                  | color name                                                                        | `pink`                | Color for Opus model                                                                                   |
+| `<level>-color`   | `effort`                 | color name                                                                        | level default (see above) | Per-level color override for `effort`. e.g. `low-color:cyan`, `max-color:magenta`                 |
 
 ### Available color names
 
 `red`, `green`, `yellow`, `cyan`, `blue`, `magenta`, `gray`, `light_gray`,
-`sky_blue`, `pink`, `amber`, `bold`, `bold_yellow`
+`sky_blue`, `pink`, `amber`, `purple`, `bold`, `bold_yellow`
 
 ### Examples
 
@@ -318,6 +319,34 @@ Add the `export` line to `~/.zprofile` or `~/.bashrc` to apply it permanently.
 The OAuth access token has expired (tokens have an 8-hour lifetime). Run
 `/login` in Claude Code to obtain a new token. The script checks the
 `expiresAt` field before calling the API, avoiding unnecessary 401 requests.
+
+### Auto-fixing frequent auth expiry (macOS, opt-in)
+
+If Claude Code's authentication keeps breaking, set the environment variable
+`CLAUDE_NANO_LINE_AUTO_FIX_AUTH=1`. When ClaudeNanoLine detects a *confirmed*
+auth failure — a 401 that persists after the built-in forced retry, or a
+Keychain token that has stayed expired for over an hour — it runs
+`security delete-generic-password -s 'Claude Code-credentials'` to clear the
+stale entry, and then immediately retries using other available tokens (e.g., from the credentials file) in the same process, prompting a fresh login if none are found.
+
+- **macOS only**, and **disabled by default**. Routine token expiry never
+  triggers it.
+- This command is **destructive**: it deletes the Keychain auth entry, so you
+  will need to re-authenticate with `/login` afterward.
+- To avoid repeated runs, the command fires **at most once per hour** (tracked
+  by the marker `$XDG_STATE_HOME/claude-nano-line/auth-fix.marker`). Each
+  attempt is recorded in the API log (`claude-usage-api.log`) as
+  `info:auth-fix ...`.
+
+Enable it via the `env` block of `~/.claude/settings.json`:
+
+```json
+{
+  "env": {
+    "CLAUDE_NANO_LINE_AUTO_FIX_AUTH": "1"
+  }
+}
+```
 
 ### Shows `Timeout`
 

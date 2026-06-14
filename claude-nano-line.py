@@ -10,7 +10,7 @@
 
 from __future__ import annotations
 
-__version__ = "1.3.0"
+__version__ = "1.5.0"
 
 import hashlib
 import json
@@ -43,6 +43,8 @@ CMD_TIMEOUT = 2
 DEFAULT_WARN_PCT = 80
 DEFAULT_CRIT_PCT = 95
 API_URL = "https://api.anthropic.com/api/oauth/usage"
+AUTO_FIX_AUTH_COOLDOWN = 3600  # 認証修復コマンドの再実行を抑止する最短間隔（秒）= 1時間
+AUTH_STUCK_GRACE = 3600  # トークン期限切れがこの秒数を超えたら「更新が詰まっている」とみなす
 
 MODEL_CONTEXT_SIZES = {
     "1m context": 1_000_000,
@@ -87,8 +89,17 @@ COLOR_MAP = {
     "sky_blue": "\033[38;5;117m",
     "pink": "\033[38;5;213m",
     "amber": "\033[38;5;179m",
+    "purple": "\033[38;5;141m",
     "bold": "\033[1m",
     "bold_yellow": "\033[1;33m",
+}
+
+EFFORT_DEFAULT_COLORS = {
+    "low": "yellow",
+    "medium": "green",
+    "high": "sky_blue",
+    "xhigh": "purple",
+    "max": "red",
 }
 
 THEMES = {
@@ -191,6 +202,24 @@ def get_git_dirty(cwd):
     return False
 
 
+# ── Git commit (detached HEAD fallback) ─────────────────────────────────────────
+def get_git_commit(cwd):
+    if not cwd:
+        return ""
+    try:
+        result = subprocess.run(
+            ["git", "-C", cwd, "rev-parse", "--short=7", "HEAD"],
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+        if result.returncode == 0:
+            return result.stdout.strip()
+    except Exception:
+        pass
+    return ""
+
+
 # ── OAuth token ─────────────────────────────────────────────────────────────────
 def _extract_token(oauth_data):
     """claudeAiOauth dict からトークンを取り出し、期限切れなら warn ログを出す。
@@ -277,6 +306,90 @@ def write_log(msg):
         pass
 
 
+# ── Auth auto-fix (macOS, opt-in) ───────────────────────────────────────────────
+def _auth_fix_marker_path() -> Path:
+    """認証修復コマンドの最終実行時刻を記録するマーカーのパス。
+
+    LOG_DIR を呼び出し時に参照するため、LOG_DIR を差し替える既存テストで
+    自動的に隔離される（モジュール定数にしない理由）。
+    """
+    return LOG_DIR / "auth-fix.marker"
+
+
+def _auto_fix_enabled() -> bool:
+    """環境変数 CLAUDE_NANO_LINE_AUTO_FIX_AUTH が truthy なら True（既定 OFF）"""
+    val = os.environ.get("CLAUDE_NANO_LINE_AUTO_FIX_AUTH", "")
+    return val.strip().lower() in ("1", "true", "yes", "on")
+
+
+def _auth_fix_on_cooldown() -> bool:
+    """マーカーの記録時刻からクールダウン期間内なら True（連打防止）"""
+    try:
+        last = float(_auth_fix_marker_path().read_text().strip())
+        return time.time() - last < AUTO_FIX_AUTH_COOLDOWN
+    except Exception:
+        return False
+
+
+def _clear_auth_fix_marker() -> None:
+    """マーカーを削除する（認証回復時に呼び、次の障害エピソードで再び効くようにする）"""
+    try:
+        _auth_fix_marker_path().unlink()
+    except Exception:
+        pass
+
+
+def _keychain_auth_stuck() -> bool:
+    """Keychain にトークンはあるが期限切れが grace 超で継続しているか（Scenario B）"""
+    if sys.platform != "darwin":
+        return False
+    try:
+        result = subprocess.run(
+            ["security", "find-generic-password", "-s", "Claude Code-credentials", "-w"],
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+        if result.returncode != 0:
+            return False
+        oauth = json.loads(result.stdout.strip()).get("claudeAiOauth", {})
+        expires_at = oauth.get("expiresAt")
+        if expires_at is None:
+            return False
+        return time.time() - int(expires_at) / 1000 > AUTH_STUCK_GRACE
+    except Exception:
+        return False
+
+
+def maybe_fix_keychain_auth(reason: str) -> None:
+    """確定した認証障害を検知したとき、macOS Keychain の認証エントリを削除する。
+
+    opt-in (CLAUDE_NANO_LINE_AUTO_FIX_AUTH) かつ macOS 限定。クールダウン中は
+    スキップ。marker を先に書いてから実行することで、コマンドが途中失敗・ハング
+    しても再実行を AUTO_FIX_AUTH_COOLDOWN 秒間抑止する。
+    """
+    try:
+        if not _auto_fix_enabled():
+            return
+        if sys.platform != "darwin":
+            return
+        if _auth_fix_on_cooldown():
+            return
+        LOG_DIR.mkdir(parents=True, exist_ok=True)
+        _auth_fix_marker_path().write_text(str(time.time()))
+        result = subprocess.run(
+            ["security", "delete-generic-password", "-s", "Claude Code-credentials"],
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+        write_log("info:auth-fix attempted reason=" + reason + " rc=" + str(result.returncode))
+    except subprocess.TimeoutExpired:
+        write_log("info:auth-fix timeout reason=" + reason)
+    except Exception as e:
+        write_log("info:auth-fix error=" + str(e))
+
+
 # ── SSL ─────────────────────────────────────────────────────────────────────────
 def _build_ssl_context():
     """HTTPS 用 SSL コンテキストを構築する。
@@ -346,6 +459,8 @@ def fetch_usage(token, force_auth_retry=False):
                     "_auth_retry_done": force_auth_retry,
                 }
             )
+            if force_auth_retry:
+                maybe_fix_keychain_auth("http401")
             return {"api_error": "auth"}
         if e.code == 429:
             write_log("error:limit http_status=429")
@@ -382,6 +497,8 @@ def fetch_usage(token, force_auth_retry=False):
                     "_auth_retry_done": force_auth_retry,
                 }
             )
+            if force_auth_retry:
+                maybe_fix_keychain_auth("urlerror-unauthorized")
             return {"api_error": "auth"}
         write_log("error:unknown url_error=" + str(reason))
         write_cache({"api_error": "unknown"})
@@ -423,7 +540,29 @@ def fetch_usage(token, force_auth_retry=False):
     }
     write_log("ok 5h=" + str(five_pct) + "% 7d=" + str(seven_pct) + "%")
     write_cache(result)
+    _clear_auth_fix_marker()
     return result
+
+
+def _fetch_with_auto_fix(token):
+    """トークンを使ってAPIを呼び出す。401エラーの場合、opt-in設定が有効なら
+    同一プロセス内で検証のための強制リトライ -> Keychain自動修復 -> 別のトークンで再試行を試みる。
+    """
+    res = fetch_usage(token)
+    if res.get("api_error") == "auth" and _auto_fix_enabled():
+        # 1回目の401発生後、一時的なエラーか検証するために、同一トークンで1回だけ即時再試行
+        write_log("info:auth error; verifying with instant retry")
+        res2 = fetch_usage(token, force_auth_retry=True)
+        if res2.get("api_error") == "auth":
+            # 2回連続で401エラーとなり、Keychain削除が実行されたはずなので、
+            # 新しいトークン（credentials file 等の別ソース）の取得を試みる
+            new_token = get_oauth_token()
+            if new_token and _token_hash(new_token) != _token_hash(token):
+                write_log("info:keychain auth cleared; retrying with credentials file token")
+                return fetch_usage(new_token)
+        else:
+            return res2
+    return res
 
 
 def _is_reset_since(iso_str, cached_ts):
@@ -449,16 +588,22 @@ def get_usage_data():
             cached_hash = cached.get("_token_hash")
             if token and cached_hash and _token_hash(token) != cached_hash:
                 write_log("info:token changed; bypassing auth error cache")
-                return fetch_usage(token)
+                return _fetch_with_auto_fix(token)
             # トークンが取得できるのにhashがない場合 = no-token状態から復帰した（auth限定）
             if token and cached_err == "auth" and not cached_hash:
                 write_log("info:token now available; bypassing no-token auth error cache")
-                return fetch_usage(token)
+                return _fetch_with_auto_fix(token)
             # トークンが同じでも、認証エラー時は1回だけ強制再試行する
             if token and cached_hash and not cached.get("_auth_retry_done", False):
                 write_log("info:forcing one auth retry with current token")
                 write_cache({**cached, "_auth_retry_done": True})
-                return fetch_usage(token, force_auth_retry=True)
+                res = fetch_usage(token, force_auth_retry=True)
+                if res.get("api_error") == "auth" and _auto_fix_enabled():
+                    new_token = get_oauth_token()
+                    if new_token and _token_hash(new_token) != _token_hash(token):
+                        write_log("info:keychain auth cleared; retrying with credentials file token")
+                        return fetch_usage(new_token)
+                return res
         ts = cached.get("_ts", 0)
         if _is_reset_since(cached.get("five_resets_at"), ts):
             cached["five_hour_pct"] = 0
@@ -470,9 +615,15 @@ def get_usage_data():
     if not token:
         write_log("warn:no token (expired or missing — run /login in Claude Code)")
         write_cache({"api_error": "auth"})
+        if _auto_fix_enabled() and _keychain_auth_stuck():
+            maybe_fix_keychain_auth("token-stuck-expired")
+            new_token = get_oauth_token()
+            if new_token:
+                write_log("info:keychain auth stuck-expired fixed; retrying with credentials file token")
+                return _fetch_with_auto_fix(new_token)
         return {"api_error": "auth"}
 
-    return fetch_usage(token)
+    return _fetch_with_auto_fix(token)
 
 
 # ── Rendering helpers ───────────────────────────────────────────────────────────
@@ -1028,7 +1179,9 @@ def render_custom(fmt, ctx_remaining, usage, model, cwd_real, git_branch, git_di
                 return "", ""
             if opts.get("hide-if", "") == level:
                 return "", ""
-            return level, COLOR_MAP.get(opts.get("color", ""), "")
+            # color 優先順位: <level>-color > color > レベル別デフォルト
+            color_key = opts.get(level + "-color") or opts.get("color") or EFFORT_DEFAULT_COLORS.get(level, "")
+            return level, COLOR_MAP.get(color_key, "")
 
         if name == "output_style":
             style = meta.get("output_style") or ""
@@ -1230,7 +1383,7 @@ def main():
         "exceeds_200k": input_data.get("exceeds_200k_tokens"),
     }
 
-    git_branch = get_git_branch(cwd_real)
+    git_branch = get_git_branch(cwd_real) or get_git_commit(cwd_real)
     git_dirty = get_git_dirty(cwd_real) if git_branch else False
     usage = get_usage_data()
 

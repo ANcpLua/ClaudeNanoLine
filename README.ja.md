@@ -174,7 +174,7 @@ export CLAUDE_NANO_LINE_THEME=ocean
 | `cost`             | `$0.42`           | セッション推定コスト（`cost.total_cost_usd` から）                    |
 | `lines_added`      | `+156`            | このセッションで追加された行数（`cost.total_lines_added` から）       |
 | `lines_removed`    | `-23`             | このセッションで削除された行数（`cost.total_lines_removed` から）     |
-| `effort`           | `max`             | reasoning effort レベル（`effort.level` から）                        |
+| `effort`           | `max`             | reasoning effort レベル（`effort.level` から）。デフォルト色: low=yellow, medium=green, high=sky\_blue, xhigh=purple, max=red |
 | `output_style`     | `default`         | アクティブな output style（`output_style.name` から）                 |
 | `session_name`     | `audit-pr`        | カスタムセッション名（`session_name` から）                           |
 | `vim_mode`         | `NORMAL`          | Vim モード（vim editor mode 有効時、`vim.mode` から）                 |
@@ -208,11 +208,12 @@ export CLAUDE_NANO_LINE_THEME=ocean
 | `haiku-color`     | `model`                  | 色名                                                                              | `amber`                  | Haiku モデル時の色                                                                                    |
 | `sonnet-color`    | `model`                  | 色名                                                                              | `sky_blue`               | Sonnet モデル時の色                                                                                   |
 | `opus-color`      | `model`                  | 色名                                                                              | `pink`                   | Opus モデル時の色                                                                                     |
+| `<level>-color`   | `effort`                 | 色名                                                                              | レベル別デフォルト（上記参照） | effort のレベル別色上書き。例: `low-color:cyan`, `max-color:magenta`                            |
 
 ### 使用可能な色名
 
 `red`, `green`, `yellow`, `cyan`, `blue`, `magenta`, `gray`, `light_gray`,
-`sky_blue`, `pink`, `amber`, `bold`, `bold_yellow`
+`sky_blue`, `pink`, `amber`, `purple`, `bold`, `bold_yellow`
 
 ### 設定例
 
@@ -311,6 +312,31 @@ tail -n 20 "${XDG_STATE_HOME:-$HOME/.local/state}/claude-nano-line/claude-usage-
 OAuth アクセストークンが期限切れです（トークンの有効期間は 8 時間）。Claude Code で
 `/login` を実行して新しいトークンを取得してください。スクリプトは API を呼び出す前に
 `expiresAt` フィールドを確認し、不要な 401 リクエストを回避します。
+
+### 認証切れが頻発する場合の自動修復（macOS 限定・opt-in）
+
+Claude Code の認証が頻繁に切れる場合、環境変数 `CLAUDE_NANO_LINE_AUTO_FIX_AUTH=1`
+を設定してください。ClaudeNanoLine が *確定した* 認証障害（組み込みの強制再試行後も
+続く 401、または Keychain のトークンが 1 時間を超えて期限切れのまま）を検知すると、
+`security delete-generic-password -s 'Claude Code-credentials'` を自動実行して
+古い認証エントリを削除した上で、同一プロセス内で credentials file などの別トークンによる即時リトライ（無ければ再ログイン）を試みます。
+
+- **macOS 限定**かつ**既定では無効**です。通常のトークン期限切れでは発火しません。
+- このコマンドは**破壊的**です。Keychain の認証エントリを削除するため、実行後は
+  `/login` での**再ログインが必要**になります。
+- 連打を防ぐため、コマンドの再実行は**最短 1 時間間隔**です（マーカー
+  `$XDG_STATE_HOME/claude-nano-line/auth-fix.marker` で管理）。実行のたびに
+  API ログ（`claude-usage-api.log`）へ `info:auth-fix ...` として記録されます。
+
+`~/.claude/settings.json` の `env` ブロックで有効化します:
+
+```json
+{
+  "env": {
+    "CLAUDE_NANO_LINE_AUTO_FIX_AUTH": "1"
+  }
+}
+```
 
 ### `Timeout` と表示される
 
