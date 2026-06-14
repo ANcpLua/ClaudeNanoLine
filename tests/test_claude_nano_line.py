@@ -311,6 +311,10 @@ class TestRenderDefault(unittest.TestCase):
         out = strip_ansi(cnl.render_default(None, self._usage(api_error="unknown"), "sonnet", "proj", ""))
         self.assertIn("Unknown Error", out)
 
+    def test_api_error_forbidden(self):
+        out = strip_ansi(cnl.render_default(None, self._usage(api_error="forbidden"), "sonnet", "proj", ""))
+        self.assertIn("Forbidden", out)
+
     def test_with_ctx_remaining(self):
         out = strip_ansi(cnl.render_default(70, self._usage(), "sonnet", "proj", ""))
         self.assertIn("[ctx]", out)
@@ -480,6 +484,10 @@ class TestRenderCustom(unittest.TestCase):
     def test_api_error_in_pct(self):
         out = strip_ansi(self._render("{5h_pct}", usage=self._usage(api_error="timeout")))
         self.assertEqual(out, "Timeout")
+
+    def test_api_error_forbidden_in_pct(self):
+        out = strip_ansi(self._render("{5h_pct}", usage=self._usage(api_error="forbidden")))
+        self.assertEqual(out, "Forbidden")
 
     def test_ctx_pct_not_affected_by_api_error(self):
         out = strip_ansi(self._render("{ctx_pct}", ctx=70, usage=self._usage(api_error="timeout")))
@@ -798,6 +806,29 @@ class TestFetchUsage(unittest.TestCase):
             result = cnl.fetch_usage("mytoken")
         self.assertEqual(result, {"api_error": "unknown"})
 
+    def test_http_error_403_permission_error(self):
+        # 403 + body の error.type == "permission_error" → 専用バケット "forbidden" に分類
+        import io
+        from urllib.error import HTTPError
+
+        body = io.BytesIO(
+            b'{"type":"error","error":{"type":"permission_error",'
+            b'"message":"OAuth token does not meet scope requirement user:profile"}}'
+        )
+        with patch.object(cnl, "urlopen", side_effect=HTTPError("url", 403, "Forbidden", {}, body)):
+            result = cnl.fetch_usage("mytoken")
+        self.assertEqual(result, {"api_error": "forbidden"})
+
+    def test_http_error_403_other_error_type_stays_unknown(self):
+        # 403 でも permission_error 以外のボディは従来通り "unknown" に分類
+        import io
+        from urllib.error import HTTPError
+
+        body = io.BytesIO(b'{"type":"error","error":{"type":"invalid_request_error","message":"bad"}}')
+        with patch.object(cnl, "urlopen", side_effect=HTTPError("url", 403, "Forbidden", {}, body)):
+            result = cnl.fetch_usage("mytoken")
+        self.assertEqual(result, {"api_error": "unknown"})
+
     def test_json_parse_error(self):
         mock_resp = MagicMock()
         mock_resp.read.return_value = b"not-json"
@@ -924,14 +955,14 @@ class TestMainIntegration(unittest.TestCase):
                         if env:
                             env_patch = env
                         with patch.dict(os.environ, env_patch, clear=False):
-                            # CLAUDE_NANO_LINE_FORMAT をクリアする場合
+                            # FORMAT/THEME を渡されていない場合は明示的にクリアして、
+                            # 実行環境のシェル変数がテストに漏れ込むのを防ぐ
+                            clear_env = {}
                             if "CLAUDE_NANO_LINE_FORMAT" not in env_patch:
-                                with patch.dict(os.environ, {"CLAUDE_NANO_LINE_FORMAT": ""}, clear=False):
-                                    captured = io.StringIO()
-                                    with patch("sys.stdout", captured):
-                                        cnl.main()
-                                    return captured.getvalue()
-                            else:
+                                clear_env["CLAUDE_NANO_LINE_FORMAT"] = ""
+                            if "CLAUDE_NANO_LINE_THEME" not in env_patch:
+                                clear_env["CLAUDE_NANO_LINE_THEME"] = ""
+                            with patch.dict(os.environ, clear_env, clear=False):
                                 captured = io.StringIO()
                                 with patch("sys.stdout", captured):
                                     cnl.main()
@@ -1415,7 +1446,7 @@ class TestThemePresets(unittest.TestCase):
     }
 
     def test_themes_dict_has_expected_keys(self):
-        expected = {"classic", "minimal", "ocean", "forest", "sunset", "nerd"}
+        expected = {"classic", "minimal", "ocean", "forest", "sunset", "nerd", "harmony"}
         self.assertEqual(set(cnl.THEMES.keys()), expected)
 
     def test_all_themes_render_without_error(self):
@@ -1424,6 +1455,37 @@ class TestThemePresets(unittest.TestCase):
                 out = cnl.render_custom(fmt, 70, self._USAGE, "claude-sonnet-4-6", "/home/user/proj", "main", False)
                 self.assertIsInstance(out, str)
                 self.assertTrue(len(out) > 0)
+
+    def test_harmony_theme_segment_priming_distinct_baseline_colors(self):
+        # Each percentage segment must use a distinct baseline color so the line is
+        # pre-attentively segmentable when all values are below the warn threshold.
+        out = cnl.render_custom(
+            cnl.THEMES["harmony"], 97, self._USAGE, "claude-opus-4-7", "/home/user/proj", "main", False
+        )
+        self.assertIn(cnl.COLOR_MAP["sky_blue"], out)  # ctx baseline
+        self.assertIn(cnl.COLOR_MAP["cyan"], out)  # 5h baseline + branch
+        self.assertIn(cnl.COLOR_MAP["green"], out)  # 7d baseline
+        # No warm colors should appear when all percentages are calm.
+        self.assertNotIn(cnl.COLOR_MAP["yellow"], out)
+        self.assertNotIn(cnl.COLOR_MAP["red"], out)
+
+    def test_harmony_theme_threshold_priming_overrides_baseline(self):
+        # When 5h crosses warn (≥80%) and 7d crosses alert (≥95%), warm colors must
+        # appear so attention is pre-attentively drawn — even though the cool baseline
+        # is the calm-state default.
+        usage = {"five_hour_pct": 85, "seven_day_pct": 96, "five_resets_at": "", "seven_resets_at": ""}
+        out = cnl.render_custom(cnl.THEMES["harmony"], 50, usage, "claude-opus-4-7", "/home/user/proj", "main", False)
+        self.assertIn(cnl.COLOR_MAP["yellow"], out)
+        self.assertIn(cnl.COLOR_MAP["red"], out)
+
+    def test_harmony_theme_dirty_branch_uses_amber_not_red(self):
+        # Dirty marker should use amber (attention without alarm) rather than red,
+        # which is reserved for true quota alerts.
+        out = cnl.render_custom(
+            cnl.THEMES["harmony"], 50, self._USAGE, "claude-opus-4-7", "/home/user/proj", "main", True
+        )
+        self.assertIn(cnl.COLOR_MAP["amber"], out)
+        self.assertIn("main*", strip_ansi(out))
 
     def test_theme_env_used_when_format_not_set(self):
         with patch.dict(os.environ, {"CLAUDE_NANO_LINE_THEME": "ocean"}, clear=False):
@@ -1901,6 +1963,150 @@ class TestGetUsageDataResetOverride(unittest.TestCase):
             data = cnl.get_usage_data()
         self.assertEqual(data.get("api_error"), "timeout")
         self.assertNotIn("five_hour_pct", data)
+
+
+class TestFmtDurationMs(unittest.TestCase):
+    def test_none(self):
+        self.assertEqual(cnl.fmt_duration_ms(None), "")
+
+    def test_invalid(self):
+        self.assertEqual(cnl.fmt_duration_ms("nope"), "")
+
+    def test_seconds(self):
+        self.assertEqual(cnl.fmt_duration_ms(45_000), "45s")
+
+    def test_minutes(self):
+        self.assertEqual(cnl.fmt_duration_ms(840_000), "14m")
+
+    def test_hour_only(self):
+        self.assertEqual(cnl.fmt_duration_ms(3_600_000), "1h")
+
+    def test_hour_with_minutes(self):
+        self.assertEqual(cnl.fmt_duration_ms(7_920_000), "2h12m")
+
+
+class TestFmtCost(unittest.TestCase):
+    def test_none(self):
+        self.assertEqual(cnl.fmt_cost(None), "")
+
+    def test_invalid(self):
+        self.assertEqual(cnl.fmt_cost("nope"), "")
+
+    def test_default_digits(self):
+        self.assertEqual(cnl.fmt_cost(0.42), "$0.42")
+
+    def test_custom_digits(self):
+        self.assertEqual(cnl.fmt_cost(3.14159, digits=3), "$3.142")
+
+    def test_zero(self):
+        self.assertEqual(cnl.fmt_cost(0), "$0.00")
+
+
+class TestNativeMetaTokens(unittest.TestCase):
+    def _render(self, fmt, meta):
+        return strip_ansi(cnl.render_custom(fmt, None, {}, "claude-opus-4-7", "/home/user", "main", False, meta))
+
+    def test_duration_renders(self):
+        out = self._render("{duration}", {"duration_ms": 845_000})
+        self.assertEqual(out, "14m")
+
+    def test_duration_hide_under_sec(self):
+        out = self._render("{duration|hide-under-sec:60}", {"duration_ms": 45_000})
+        self.assertEqual(out, "")
+
+    def test_duration_above_threshold_shown(self):
+        out = self._render("{duration|hide-under-sec:60}", {"duration_ms": 120_000})
+        self.assertEqual(out, "2m")
+
+    def test_duration_missing_hidden(self):
+        self.assertEqual(self._render("{duration}", {}), "")
+
+    def test_api_duration_renders(self):
+        out = self._render("{api_duration}", {"api_duration_ms": 7_000})
+        self.assertEqual(out, "7s")
+
+    def test_cost_renders(self):
+        out = self._render("{cost}", {"cost_usd": 0.42})
+        self.assertEqual(out, "$0.42")
+
+    def test_cost_custom_digits(self):
+        out = self._render("{cost|digits:3}", {"cost_usd": 3.14159})
+        self.assertEqual(out, "$3.142")
+
+    def test_cost_hide_zero(self):
+        self.assertEqual(self._render("{cost|hide-zero:1}", {"cost_usd": 0}), "")
+
+    def test_cost_zero_shown_without_hide(self):
+        self.assertEqual(self._render("{cost}", {"cost_usd": 0}), "$0.00")
+
+    def test_cost_missing_hidden(self):
+        self.assertEqual(self._render("{cost}", {}), "")
+
+    def test_lines_added_renders_with_plus(self):
+        self.assertEqual(self._render("{lines_added}", {"lines_added": 156}), "+156")
+
+    def test_lines_removed_renders_with_minus(self):
+        self.assertEqual(self._render("{lines_removed}", {"lines_removed": 23}), "-23")
+
+    def test_lines_added_hide_zero(self):
+        self.assertEqual(self._render("{lines_added|hide-zero:1}", {"lines_added": 0}), "")
+
+    def test_lines_added_zero_shown_without_hide(self):
+        self.assertEqual(self._render("{lines_added}", {"lines_added": 0}), "+0")
+
+    def test_effort_renders(self):
+        self.assertEqual(self._render("{effort}", {"effort_level": "max"}), "max")
+
+    def test_effort_hide_if_default(self):
+        self.assertEqual(self._render("{effort|hide-if:medium}", {"effort_level": "medium"}), "")
+
+    def test_effort_missing_hidden(self):
+        self.assertEqual(self._render("{effort}", {}), "")
+
+    def test_output_style_renders(self):
+        self.assertEqual(self._render("{output_style}", {"output_style": "explanatory"}), "explanatory")
+
+    def test_output_style_hide_if(self):
+        self.assertEqual(self._render("{output_style|hide-if:default}", {"output_style": "default"}), "")
+
+    def test_session_name_renders(self):
+        self.assertEqual(self._render("{session_name}", {"session_name": "audit-pr"}), "audit-pr")
+
+    def test_vim_mode_renders(self):
+        self.assertEqual(self._render("{vim_mode}", {"vim_mode": "NORMAL"}), "NORMAL")
+
+    def test_vim_mode_hide_if(self):
+        self.assertEqual(self._render("{vim_mode|hide-if:NORMAL}", {"vim_mode": "NORMAL"}), "")
+
+    def test_version_renders(self):
+        self.assertEqual(self._render("{version}", {"version": "2.1.90"}), "2.1.90")
+
+    def test_exceeds_200k_shows_when_true(self):
+        self.assertEqual(self._render("{exceeds_200k}", {"exceeds_200k": True}), "200k+")
+
+    def test_exceeds_200k_hidden_when_false(self):
+        self.assertEqual(self._render("{exceeds_200k}", {"exceeds_200k": False}), "")
+
+    def test_exceeds_200k_custom_text(self):
+        self.assertEqual(self._render("{exceeds_200k|text:WIDE}", {"exceeds_200k": True}), "WIDE")
+
+    def test_meta_default_empty_dict(self):
+        # render_custom must not crash when meta is None / omitted.
+        out = strip_ansi(cnl.render_custom("{duration}{cost}", None, {}, "claude-opus-4-7", "/x", "main"))
+        self.assertEqual(out, "")
+
+
+class TestHarmonyTheme(unittest.TestCase):
+    """harmony は ADHD-friendly steady-state / native Claude Code 右側メタを束ねる
+    プロジェクトのフラッグシップ theme。THEMES dict に存在し、新トークンを参照する。"""
+
+    def test_harmony_in_themes(self):
+        self.assertIn("harmony", cnl.THEMES)
+
+    def test_harmony_includes_native_meta_tokens(self):
+        fmt = cnl.THEMES["harmony"]
+        for token in ("{lines_added", "{lines_removed", "{duration", "{cost", "{effort"):
+            self.assertIn(token, fmt)
 
 
 if __name__ == "__main__":

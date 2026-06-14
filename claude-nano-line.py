@@ -10,7 +10,7 @@
 
 from __future__ import annotations
 
-__version__ = "1.2.1"
+__version__ = "1.3.0"
 
 import hashlib
 import json
@@ -126,6 +126,31 @@ THEMES = {
         "{text:7d|color:gray} {7d_pct} {7d_reset|color:light_gray} "
         "{model|haiku-color:amber,sonnet-color:sky_blue,opus-color:pink} "
         "{cwd_short|color:bold_yellow} {branch_dirty|color:cyan,dirty-color:red}"
+    ),
+    # Cool segment-priming baseline tuned for low-distraction glanceability:
+    # ctx → sky_blue, 5h → cyan, 7d → green map to "cognitive distance" (now / near / far)
+    # so each percentage is pre-attentively distinguishable without reading the label.
+    # Identity colors mirror Claude Code's native dark-ansi chrome (model pink for opus,
+    # path bold_yellow, branch cyan) so the line harmonizes with the host UI instead of
+    # competing with it. Yellow/red are reserved for warn/alert thresholds — when the
+    # baseline is uniformly cool, a single warm segment is pre-attentive.
+    "harmony": (
+        "{ctx_pct|color:sky_blue,warn-color:yellow,alert-color:red} "
+        "{ctx_used_tokens|color:light_gray}/{ctx_total_tokens|color:light_gray} "
+        "{text:5h|color:gray} {5h_pct|color:cyan,warn-color:yellow,alert-color:red} "
+        "{5h_reset|color:light_gray} "
+        "{text:7d|color:gray} {7d_pct|color:green,warn-color:yellow,alert-color:red} "
+        "{7d_reset|color:light_gray} "
+        "{model|haiku-color:amber,sonnet-color:sky_blue,opus-color:pink} "
+        "{cwd_short|color:bold_yellow} {branch_dirty|color:cyan,dirty-color:amber} "
+        # Right side: native Claude Code session metadata picked for ADHD time-blindness
+        # support (duration), concrete progress feedback (lines_added/removed), and
+        # consequence awareness (cost). Hidden when zero/default to avoid ambient noise.
+        "{lines_added|color:cyan,hide-zero:1} "
+        "{lines_removed|color:light_gray,hide-zero:1} "
+        "{duration|color:light_gray,hide-under-sec:60} "
+        "{cost|color:light_gray,hide-zero:1} "
+        "{effort|color:pink,hide-if:medium}"
     ),
 }
 
@@ -326,6 +351,15 @@ def fetch_usage(token, force_auth_retry=False):
             write_log("error:limit http_status=429")
             write_cache({"api_error": "limit"})
             return {"api_error": "limit"}
+        if e.code == 403:
+            try:
+                body = json.loads(e.read())
+            except Exception:
+                body = {}
+            if body.get("error", {}).get("type") == "permission_error":
+                write_log("error:forbidden http_status=403 (token scope insufficient)")
+                write_cache({"api_error": "forbidden"})
+                return {"api_error": "forbidden"}
         write_log("error:unknown http_status=" + str(e.code))
         write_cache({"api_error": "unknown"})
         return {"api_error": "unknown"}
@@ -591,6 +625,36 @@ def fmt_tokens(count):
     return str(count)
 
 
+def fmt_duration_ms(ms):
+    """ミリ秒を 47s / 12m / 1h23m のように短縮表示"""
+    if ms is None:
+        return ""
+    try:
+        secs = int(ms) // 1000
+    except (TypeError, ValueError):
+        return ""
+    if secs < 60:
+        return "{}s".format(secs)
+    mins = secs // 60
+    if mins < 60:
+        return "{}m".format(mins)
+    hours, rem_min = divmod(mins, 60)
+    if rem_min == 0:
+        return "{}h".format(hours)
+    return "{}h{}m".format(hours, rem_min)
+
+
+def fmt_cost(usd, digits=2):
+    """USD コストを $0.42 形式で表示"""
+    if usd is None:
+        return ""
+    try:
+        v = float(usd)
+    except (TypeError, ValueError):
+        return ""
+    return "${:.{d}f}".format(v, d=digits)
+
+
 def estimate_tokens(model_name, ctx_remaining_pct):
     """モデル名と remaining_percentage から (used_tokens, total_tokens) を推定"""
     if ctx_remaining_pct is None:
@@ -629,6 +693,7 @@ def render_default(ctx_remaining, usage, model, cwd_base, git_branch, git_dirty=
             "auth": "Token Expired (/login)",
             "limit": "Usage API Rate Limit",
             "timeout": "Timeout",
+            "forbidden": "Forbidden",
             "unknown": "Unknown Error",
         }
         five_part = COLOR_MAP["light_gray"] + err_map.get(api_error, "Unknown Error") + RESET
@@ -714,7 +779,7 @@ def _resolve_on_error(opts):
     return "default", ""
 
 
-def render_custom(fmt, ctx_remaining, usage, model, cwd_real, git_branch, git_dirty=False):
+def render_custom(fmt, ctx_remaining, usage, model, cwd_real, git_branch, git_dirty=False, meta=None):
     api_error = usage.get("api_error", "")
     cwd_short = str(Path(cwd_real)).replace(str(Path.home()), "~") if cwd_real else ""
     cwd_base = Path(cwd_real).name if cwd_real else ""
@@ -724,6 +789,8 @@ def render_custom(fmt, ctx_remaining, usage, model, cwd_real, git_branch, git_di
     ctx_used = None
     if ctx_remaining is not None:
         ctx_used = 100 - int(ctx_remaining)
+
+    meta = meta or {}
 
     def resolve(name, opts):
         # pct 系
@@ -737,7 +804,13 @@ def render_custom(fmt, ctx_remaining, usage, model, cwd_real, git_branch, git_di
                     return "", ""
                 if mode == "text":
                     return custom_text, COLOR_MAP.get(opts.get("color", "light_gray"), "")
-                err_map = {"auth": "/login", "limit": "Rate Limit", "timeout": "Timeout", "unknown": "Unknown"}
+                err_map = {
+                    "auth": "/login",
+                    "limit": "Rate Limit",
+                    "timeout": "Timeout",
+                    "forbidden": "Forbidden",
+                    "unknown": "Unknown",
+                }
                 return err_map.get(api_error, "Unknown"), COLOR_MAP.get(opts.get("color", "light_gray"), "")
 
             if prefix == "ctx":
@@ -778,7 +851,13 @@ def render_custom(fmt, ctx_remaining, usage, model, cwd_real, git_branch, git_di
                     return "", ""
                 if mode == "text":
                     return custom_text, COLOR_MAP.get(opts.get("color", ""), "")
-                err_map = {"auth": "/login", "limit": "Rate Limit", "timeout": "Timeout", "unknown": "Unknown"}
+                err_map = {
+                    "auth": "/login",
+                    "limit": "Rate Limit",
+                    "timeout": "Timeout",
+                    "forbidden": "Forbidden",
+                    "unknown": "Unknown",
+                }
                 return err_map.get(api_error, "Unknown"), COLOR_MAP.get(opts.get("color", ""), "")
             if name == "5h_reset":
                 iso = usage.get("five_resets_at", "")
@@ -806,7 +885,13 @@ def render_custom(fmt, ctx_remaining, usage, model, cwd_real, git_branch, git_di
                     return "", ""
                 if mode == "text":
                     return custom_text, COLOR_MAP.get(opts.get("color", ""), "")
-                err_map = {"auth": "/login", "limit": "Rate Limit", "timeout": "Timeout", "unknown": "Unknown"}
+                err_map = {
+                    "auth": "/login",
+                    "limit": "Rate Limit",
+                    "timeout": "Timeout",
+                    "forbidden": "Forbidden",
+                    "unknown": "Unknown",
+                }
                 return err_map.get(api_error, "Unknown"), COLOR_MAP.get(opts.get("color", ""), "")
             if name == "5h_reset_at":
                 iso = usage.get("five_resets_at", "")
@@ -890,6 +975,96 @@ def render_custom(fmt, ctx_remaining, usage, model, cwd_real, git_branch, git_di
             else:
                 color = COLOR_MAP.get(opts.get("color", "gray"), "")
             return val, color
+
+        # Native Claude Code session metadata
+        if name in ("duration", "api_duration"):
+            ms = meta.get("duration_ms" if name == "duration" else "api_duration_ms")
+            if ms is None:
+                return "", ""
+            try:
+                hide_under = int(opts.get("hide-under-sec", "0"))
+            except (TypeError, ValueError):
+                hide_under = 0
+            if hide_under and (int(ms) // 1000) < hide_under:
+                return "", ""
+            val = fmt_duration_ms(ms)
+            if not val:
+                return "", ""
+            return val, COLOR_MAP.get(opts.get("color", ""), "")
+
+        if name == "cost":
+            usd = meta.get("cost_usd")
+            if usd is None:
+                return "", ""
+            try:
+                digits = int(opts.get("digits", "2"))
+            except (TypeError, ValueError):
+                digits = 2
+            try:
+                v = float(usd)
+            except (TypeError, ValueError):
+                return "", ""
+            if opts.get("hide-zero", "") and v == 0:
+                return "", ""
+            return fmt_cost(v, digits), COLOR_MAP.get(opts.get("color", ""), "")
+
+        if name in ("lines_added", "lines_removed"):
+            key = "lines_added" if name == "lines_added" else "lines_removed"
+            n = meta.get(key)
+            if n is None:
+                return "", ""
+            try:
+                ni = int(n)
+            except (TypeError, ValueError):
+                return "", ""
+            if opts.get("hide-zero", "") and ni == 0:
+                return "", ""
+            sign = "+" if name == "lines_added" else "-"
+            return "{}{}".format(sign, ni), COLOR_MAP.get(opts.get("color", ""), "")
+
+        if name == "effort":
+            level = meta.get("effort_level") or ""
+            if not level:
+                return "", ""
+            if opts.get("hide-if", "") == level:
+                return "", ""
+            return level, COLOR_MAP.get(opts.get("color", ""), "")
+
+        if name == "output_style":
+            style = meta.get("output_style") or ""
+            if not style:
+                return "", ""
+            if opts.get("hide-if", "") == style:
+                return "", ""
+            return style, COLOR_MAP.get(opts.get("color", ""), "")
+
+        if name == "session_name":
+            sn = meta.get("session_name") or ""
+            if not sn:
+                return "", ""
+            return sn, COLOR_MAP.get(opts.get("color", ""), "")
+
+        if name == "vim_mode":
+            vm = meta.get("vim_mode") or ""
+            if not vm:
+                return "", ""
+            if opts.get("hide-if", "") == vm:
+                return "", ""
+            return vm, COLOR_MAP.get(opts.get("color", ""), "")
+
+        if name == "version":
+            ver = meta.get("version") or ""
+            if not ver:
+                return "", ""
+            return ver, COLOR_MAP.get(opts.get("color", ""), "")
+
+        if name == "exceeds_200k":
+            flag = bool(meta.get("exceeds_200k"))
+            if not flag:
+                return "", ""
+            label = opts.get("text", "200k+")
+            color_key = opts.get("color", "amber")
+            return label, COLOR_MAP.get(color_key, "")
 
         return "", ""
 
@@ -1037,6 +1212,24 @@ def main():
     model = (input_data.get("model") or {}).get("display_name", "")
     ctx_remaining = (input_data.get("context_window") or {}).get("remaining_percentage")
 
+    cost_obj = input_data.get("cost") or {}
+    effort_obj = input_data.get("effort") or {}
+    output_style_obj = input_data.get("output_style") or {}
+    vim_obj = input_data.get("vim") or {}
+    meta = {
+        "cost_usd": cost_obj.get("total_cost_usd"),
+        "duration_ms": cost_obj.get("total_duration_ms"),
+        "api_duration_ms": cost_obj.get("total_api_duration_ms"),
+        "lines_added": cost_obj.get("total_lines_added"),
+        "lines_removed": cost_obj.get("total_lines_removed"),
+        "effort_level": effort_obj.get("level"),
+        "output_style": output_style_obj.get("name"),
+        "session_name": input_data.get("session_name"),
+        "vim_mode": vim_obj.get("mode"),
+        "version": input_data.get("version"),
+        "exceeds_200k": input_data.get("exceeds_200k_tokens"),
+    }
+
     git_branch = get_git_branch(cwd_real)
     git_dirty = get_git_dirty(cwd_real) if git_branch else False
     usage = get_usage_data()
@@ -1047,7 +1240,7 @@ def main():
         if theme_name:
             fmt = THEMES.get(theme_name, "")
     if fmt:
-        output = render_custom(fmt, ctx_remaining, usage, model, cwd_real, git_branch, git_dirty)
+        output = render_custom(fmt, ctx_remaining, usage, model, cwd_real, git_branch, git_dirty, meta)
     else:
         cwd_short = str(Path(cwd_real)).replace(str(Path.home()), "~") if cwd_real else ""
         cwd_base = Path(cwd_real).name if cwd_real else ""
