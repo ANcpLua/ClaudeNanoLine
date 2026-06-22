@@ -1104,6 +1104,57 @@ class TestResetDispatch(unittest.TestCase):
         self.assertRegex(val, r"^\d+\.\d+h$")
 
 
+# ── prefix / suffix option ───────────────────────────────────────────────────
+class TestPrefixSuffix(unittest.TestCase):
+    def _iso(self, seconds_from_now):
+        dt = datetime.now(timezone.utc) + timedelta(seconds=seconds_from_now)
+        return dt.strftime("%Y-%m-%dT%H:%M:%SZ")
+
+    _EMPTY_USAGE = {
+        "five_hour_pct": 0,
+        "seven_day_pct": 0,
+        "five_resets_at": "",
+        "seven_resets_at": "",
+    }
+
+    def _usage_with_reset(self, secs):
+        return {
+            "five_hour_pct": 50,
+            "seven_day_pct": 50,
+            "five_resets_at": self._iso(secs),
+            "seven_resets_at": self._iso(secs),
+        }
+
+    def _render(self, fmt, usage=None):
+        usage = usage or self._EMPTY_USAGE
+        return strip_ansi(cnl.render_custom(fmt, None, usage, "sonnet", "", ""))
+
+    def test_prefix_suffix_hidden_when_empty(self):
+        out = self._render("{5h_reset|prefix:(|suffix:)}")
+        self.assertEqual(out, "")
+
+    def test_prefix_suffix_shown_when_value_present(self):
+        out = self._render("{5h_reset|prefix:(|suffix:)}", self._usage_with_reset(9000))
+        self.assertTrue(out.startswith("("))
+        self.assertTrue(out.endswith(")"))
+        self.assertGreater(len(out), 2)
+
+    def test_prefix_only(self):
+        out = self._render("{5h_reset|prefix:[}", self._usage_with_reset(9000))
+        self.assertTrue(out.startswith("["))
+
+    def test_suffix_only(self):
+        out = self._render("{5h_reset|suffix:]}", self._usage_with_reset(9000))
+        self.assertTrue(out.endswith("]"))
+
+    def test_7d_reset_prefix_suffix(self):
+        out = self._render("{7d_reset|prefix:(|suffix:)}")
+        self.assertEqual(out, "")
+        out = self._render("{7d_reset|prefix:(|suffix:)}", self._usage_with_reset(9000))
+        self.assertTrue(out.startswith("("))
+        self.assertTrue(out.endswith(")"))
+
+
 # ── Feature 3: model per-model color ──────────────────────────────────────────
 class TestModelPerModelColor(unittest.TestCase):
     _USAGE = {
