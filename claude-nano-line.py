@@ -1298,6 +1298,10 @@ def render_custom(fmt, ctx_remaining, usage, model, cwd_real, git_branch, git_di
             opts.update(parse_options(p))
 
         val, color = resolve(identifier, opts)
+        if val:
+            prefix = opts.get("prefix", "")
+            suffix = opts.get("suffix", "")
+            val = prefix + val + suffix
         if color and val:
             return color + val + RESET
         return val
